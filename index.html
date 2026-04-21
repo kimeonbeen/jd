@@ -3,56 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Together:On 부별 실적 대시보드</title>
+    <title>Together:On 부별 성과 정밀 분석</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f1f5f9; }
-        .bar-fill { transition: width 1.2s ease-in-out; }
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; letter-spacing: -0.025em; }
+        .chart-wrapper { position: relative; height: 450px; width: 100%; }
+        .bar-fill { transition: width 1.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
     </style>
 </head>
-<body class="p-4 md:p-10">
-    <div class="max-w-[1600px] mx-auto">
-        <div class="mb-10 flex flex-col md:flex-row items-end justify-between border-b-8 border-slate-900 pb-6">
+<body class="p-4 md:p-12">
+    <div class="max-w-[1700px] mx-auto">
+        <div class="mb-12 flex flex-col md:flex-row items-end justify-between border-b-[10px] border-slate-900 pb-8">
             <div>
-                <h1 class="text-5xl font-black text-slate-900 tracking-tighter">🎯 Together:On 부별 성과 지표</h1>
-                <p class="text-slate-500 mt-4 font-bold text-xl">실시간 구글 시트 연동 시스템</p>
+                <h1 class="text-6xl font-black text-slate-900 tracking-tighter mb-2">Together:On</h1>
+                <p class="text-2xl font-bold text-blue-600">부(Bu)별 성과 실시간 비교 분석 시스템</p>
             </div>
-            <div class="mt-6 md:mt-0">
-                <div id="last-updated" class="text-sm font-black text-blue-700 bg-blue-50 px-5 py-3 rounded-2xl border-2 border-blue-200 shadow-sm">
-                    데이터 동기화 중...
+            <div class="mt-6 md:mt-0 flex flex-col items-end gap-2">
+                <div id="last-updated" class="text-sm font-black text-blue-700 bg-blue-50 px-6 py-3 rounded-2xl border-2 border-blue-100 shadow-sm">
+                    데이터 동기화 준비 중...
                 </div>
+                <p class="text-xs font-bold text-slate-400">※ 1분마다 자동으로 최신 엑셀을 읽어옵니다.</p>
             </div>
         </div>
 
-        <div id="dashboard-container" class="space-y-16">
-            <div class="text-center py-20 bg-white rounded-3xl shadow-inner border-2 border-dashed border-slate-300">
-                <p class="text-2xl font-bold text-slate-400">데이터를 불러오는 중입니다. 잠시만 기다려주세요...</p>
+        <div id="dashboard-container" class="space-y-20">
+            <div class="bg-white rounded-[3rem] p-24 text-center shadow-2xl border-2 border-dashed border-slate-200">
+                <div class="inline-block animate-spin mb-6 text-5xl">⚙️</div>
+                <h2 class="text-3xl font-black text-slate-400 italic">ANALYZING DATA...</h2>
             </div>
         </div>
     </div>
 
     <script>
-        // ★ 언빈님이 주신 구글 시트 CSV 주소입니다.
+        // ★ 언빈님의 구글 시트 데이터 주소
         const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
         
-        // 분석할 '회' 목록
+        // 분석 대상 '회' 설정
         const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
 
-        // 5단계 지표 색상 설정
-        const METRICS = {
-            '찾기': { color: '#3b82f6' },
-            '합자': { color: '#eab308' },
-            '따기': { color: '#a855f7' },
-            '복음방': { color: '#f97316' },
-            '신카접수': { color: '#10b981' }
+        // 5단계 지표별 색상 (진한 톤으로 가독성 향상)
+        const METRICS_MAP = {
+            '찾기': { t: 6, c: 8, hex: '#2563eb' },
+            '합자': { t: 11, c: 13, hex: '#d97706' },
+            '따기': { t: 16, c: 18, hex: '#9333ea' },
+            '복음방': { t: 21, c: 23, hex: '#ea580c' },
+            '신카접수': { t: 27, c: 34, hex: '#059669' }
         };
 
-        // CSV 데이터를 읽기 쉽게 쪼개는 함수
         function parseCSV(text) {
-            const rows = [];
-            let row = [], val = '', inQuotes = false;
+            let lines = [], row = [], val = '', inQuotes = false;
             for (let i = 0; i < text.length; i++) {
                 let c = text[i], next = text[i+1];
                 if (c === '"' && next === '"') { val += '"'; i++; }
@@ -60,162 +62,168 @@
                 else if (c === ',' && !inQuotes) { row.push(val); val = ''; }
                 else if ((c === '\n' || c === '\r') && !inQuotes) {
                     if (c === '\r' && next === '\n') i++;
-                    row.push(val); rows.push(row); row = []; val = '';
+                    row.push(val); lines.push(row); row = []; val = '';
                 } else { val += c; }
             }
-            row.push(val); rows.push(row);
-            return rows;
+            row.push(val); lines.push(row);
+            return lines;
         }
 
-        // 숫자 외의 문자를 제거하고 숫자로 변환
         function toNum(str) { return parseInt((str || '').replace(/[^0-9]/g, '')) || 0; }
 
-        async function updateDashboard() {
+        async function fetchDashboard() {
             try {
-                const response = await fetch(csvUrl);
+                const response = await fetch(csvUrl + '&t=' + new Date().getTime());
                 const text = await response.text();
                 const rows = parseCSV(text);
                 
                 const dataStore = {};
+                let currentMonth = "결산";
                 let lastHoe = "";
 
-                // 엑셀 가로 줄을 하나씩 읽으며 부(Bu)별 데이터 수집
                 rows.forEach(row => {
-                    if (row.length < 10) return;
-                    
-                    // '회' 이름 찾기
-                    let currentHoe = "";
-                    for(let i=2; i<=5; i++) {
-                        let cell = (row[i] || '').replace(/\s/g, '');
-                        if (targetHoes.includes(cell)) { currentHoe = cell; lastHoe = cell; break; }
+                    const rowContent = row.join('');
+                    if (rowContent.match(/(1[0-2]|[1-9])월/)) currentMonth = rowContent.match(/(1[0-2]|[1-9])월/)[0];
+                    if (rowContent.includes('소계') || rowContent.includes('합계') || rowContent.includes('총계')) return;
+
+                    let hoeName = "";
+                    for(let i=2; i<=5; i++){
+                        let cell = (row[i] || '').replace(/\s+/g, '');
+                        if(targetHoes.includes(cell)) { hoeName = cell; lastHoe = hoeName; break; }
                     }
-                    if (!currentHoe && lastHoe) currentHoe = lastHoe;
-                    if (!targetHoes.includes(currentHoe)) return;
+                    if(!hoeName && lastHoe) hoeName = lastHoe;
+                    if(!targetHoes.includes(hoeName)) return;
 
-                    // '부' 이름 찾기 (E열)
                     let buName = (row[4] || '').trim() || "본부";
-                    if (buName.includes('소계') || buName.includes('합계')) return;
+                    if(!dataStore[hoeName]) dataStore[hoeName] = [];
 
-                    if (!dataStore[currentHoe]) dataStore[currentHoe] = [];
+                    let재적 = toNum(row[5]);
+                    let metrics = {};
+                    Object.entries(METRICS_MAP).forEach(([mName, pos]) => {
+                        let t = toNum(row[pos.t]);
+                        let c = toNum(row[pos.c]);
+                        let finalT = t > 0 ? t : 재적;
+                        let p = finalT > 0 ? Math.min(Math.round((c/finalT)*100), 100) : 0;
+                        metrics[mName] = { t: finalT, c, p };
+                    });
 
-                    // 5단계 실적 데이터 추출 (고정 좌표: 찾기 8, 합자 13, 따기 18, 복음방 23, 신카 34)
-                    const m = {
-                        '찾기': { t: toNum(row[6]) || toNum(row[5]), c: toNum(row[8]) },
-                        '합자': { t: toNum(row[11]) || toNum(row[5]), c: toNum(row[13]) },
-                        '따기': { t: toNum(row[16]) || toNum(row[5]), c: toNum(row[18]) },
-                        '복음방': { t: toNum(row[21]) || toNum(row[5]), c: toNum(row[23]) },
-                        '신카접수': { t: toNum(row[27]) || toNum(row[5]), c: toNum(row[34]) }
-                    };
-
-                    dataStore[currentHoe].push({ name: buName, metrics: m });
+                    dataStore[hoeName].push({ name: buName, metrics });
                 });
 
                 const container = document.getElementById('dashboard-container');
-                container.innerHTML = '';
+                container.innerHTML = `<div class="flex items-center gap-4 mb-8">
+                    <span class="bg-slate-900 text-white px-6 py-2 rounded-full font-black text-2xl tracking-widest">${currentMonth}</span>
+                    <h2 class="text-4xl font-black text-slate-800">부별 비교 분석 리포트</h2>
+                </div>`;
+                
                 const chartConfigs = [];
 
-                // 화면 그리기
-                for (const [hoeName, bus] of Object.entries(dataStore)) {
-                    const canvasId = `chart-${hoeName}`;
+                Object.entries(dataStore).forEach(([hoeName, bus]) => {
+                    const canvasId = `canvas-${hoeName}`.replace(/[^a-zA-Z0-9]/g, '');
                     
                     let hoeHtml = `
-                        <div class="bg-white rounded-[2.5rem] shadow-2xl p-8 border border-slate-200">
-                            <div class="flex items-center gap-4 mb-8">
-                                <div class="w-3 h-12 bg-slate-900 rounded-full"></div>
-                                <h2 class="text-4xl font-black text-slate-900">${hoeName} 부별 성과</h2>
-                            </div>
+                        <div class="bg-white rounded-[4rem] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)] p-10 md:p-16 border border-slate-100 relative overflow-hidden">
+                            <div class="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-blue-600 via-purple-600 to-emerald-600"></div>
                             
-                            <div class="grid grid-cols-1 xl:grid-cols-4 gap-10">
-                                <div class="xl:col-span-3 bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100">
-                                    <h3 class="text-lg font-bold text-slate-500 mb-6 flex items-center gap-2">
-                                        📊 부별 달성률(%) 비교 차트
-                                    </h3>
-                                    <div class="h-[450px]"><canvas id="${canvasId}"></canvas></div>
+                            <div class="flex flex-col lg:flex-row lg:items-center justify-between mb-12 gap-6">
+                                <div>
+                                    <h3 class="text-5xl font-black text-slate-900 mb-2">${hoeName}</h3>
+                                    <p class="text-slate-400 font-bold text-lg">소속 부별 파이프라인 비교</p>
                                 </div>
-                                
-                                <div class="space-y-4 overflow-y-auto max-h-[550px] pr-2">
-                                    <h3 class="text-lg font-bold text-slate-800 mb-4 px-2">📍 부별 상세 (신카접수 순)</h3>
-                                    ${bus.sort((a,b) => b.metrics['신카접수'].c - a.metrics['신카접수'].c).map(bu => `
-                                        <div class="bg-white p-5 rounded-2xl border-2 border-slate-100 shadow-sm hover:border-blue-400 transition-all group">
-                                            <div class="flex justify-between items-center mb-4">
-                                                <span class="text-xl font-black text-slate-800">${bu.name}</span>
-                                                <span class="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">신카 ${bu.metrics['신카접수'].c}명</span>
-                                            </div>
-                                            <div class="space-y-3">
-                                                ${Object.entries(METRICS).map(([mName, theme]) => {
-                                                    const val = bu.metrics[mName];
-                                                    const pct = val.t > 0 ? Math.min(Math.round((val.c/val.t)*100), 100) : 0;
-                                                    return `
-                                                        <div>
-                                                            <div class="flex justify-between text-[11px] font-bold text-slate-500 mb-1">
-                                                                <span>${mName}</span>
-                                                                <span>${val.c} / ${val.t}</span>
+                                <div class="flex gap-4">
+                                    <div class="bg-slate-50 px-6 py-4 rounded-3xl border border-slate-100 text-center">
+                                        <div class="text-xs font-black text-slate-400 mb-1 italic uppercase">Active Units</div>
+                                        <div class="text-2xl font-black text-slate-800">${bus.length}개 부</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 xl:grid-cols-12 gap-16">
+                                <div class="xl:col-span-7 bg-slate-50/50 p-8 rounded-[3rem] border border-slate-100 shadow-inner">
+                                    <div class="chart-wrapper"><canvas id="${canvasId}"></canvas></div>
+                                </div>
+
+                                <div class="xl:col-span-5 space-y-6">
+                                    <h4 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                                        <span>🏆</span> 신카접수 달성 순위
+                                    </h4>
+                                    <div class="space-y-4 max-h-[500px] overflow-y-auto pr-4">
+                                        ${bus.sort((a,b) => b.metrics['신카접수'].p - a.metrics['신카접수'].p).map((bu, idx) => `
+                                            <div class="bg-white p-6 rounded-[2rem] border-2 border-slate-50 shadow-sm hover:border-blue-200 transition-all group">
+                                                <div class="flex justify-between items-center mb-6">
+                                                    <div class="flex items-center gap-3">
+                                                        <span class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm">${idx+1}</span>
+                                                        <span class="text-2xl font-black text-slate-800 tracking-tight">${bu.name}</span>
+                                                    </div>
+                                                    <div class="text-right">
+                                                        <span class="text-3xl font-black text-emerald-600">${bu.metrics['신카접수'].p}%</span>
+                                                    </div>
+                                                </div>
+                                                <div class="grid grid-cols-5 gap-3">
+                                                    ${Object.entries(METRICS_MAP).map(([mName, theme]) => {
+                                                        const m = bu.metrics[mName];
+                                                        return `
+                                                            <div class="text-center">
+                                                                <div class="text-[10px] font-black text-slate-400 mb-1">${mName}</div>
+                                                                <div class="text-sm font-black mb-1" style="color:${theme.hex}">${m.c}</div>
+                                                                <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                                                    <div class="h-full bar-fill" style="background-color:${theme.hex}; width:${m.p}%"></div>
+                                                                </div>
                                                             </div>
-                                                            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                                                <div class="h-full bar-fill" style="background-color:${theme.color}; width:${pct}%"></div>
-                                                            </div>
-                                                        </div>
-                                                    `;
-                                                }).join('')}
+                                                        `;
+                                                    }).join('')}
+                                                </div>
                                             </div>
-                                        </div>
-                                    `).join('')}
+                                        `).join('')}
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     `;
                     container.innerHTML += hoeHtml;
 
-                    // 차트 데이터 준비
                     chartConfigs.push({
                         id: canvasId,
                         labels: bus.map(b => b.name),
-                        datasets: Object.entries(METRICS).map(([mName, theme]) => ({
+                        datasets: Object.entries(METRICS_MAP).map(([mName, theme]) => ({
                             label: mName,
-                            data: bus.map(b => {
-                                const v = b.metrics[mName];
-                                return v.t > 0 ? Math.round((v.c/v.t)*100) : 0;
-                            }),
-                            backgroundColor: theme.color + 'DD',
-                            borderRadius: 8,
+                            data: bus.map(b => b.metrics[mName].p),
+                            backgroundColor: theme.hex + 'CC',
+                            borderRadius: 10,
                             barPercentage: 0.8,
-                            categoryPercentage: 0.8
+                            categoryPercentage: 0.7
                         }))
                     });
-                }
+                });
 
-                // 차트 생성
                 chartConfigs.forEach(cfg => {
                     const ctx = document.getElementById(cfg.id);
                     if(ctx) new Chart(ctx, {
                         type: 'bar',
                         data: { labels: cfg.labels, datasets: cfg.datasets },
                         options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
+                            responsive: true, maintainAspectRatio: false,
                             plugins: {
-                                legend: { position: 'top', labels: { font: { size: 14, weight: 'bold' }, usePointStyle: true } },
-                                tooltip: { titleFont: { size: 16 }, bodyFont: { size: 14 }, padding: 15 }
+                                legend: { position: 'bottom', labels: { padding: 25, font: { weight: 'bold', size: 13 }, usePointStyle: true } },
+                                tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', padding: 15, titleFont: { size: 16, weight: 'bold' }, bodyFont: { size: 14 } }
                             },
                             scales: {
-                                y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', font: { weight: 'bold' } } },
-                                x: { ticks: { font: { size: 15, weight: '900' } } }
+                                y: { beginAtZero: true, max: 110, ticks: { callback: v => v + '%', color: '#94a3b8', font: { weight: 'bold' } }, grid: { borderDash: [5, 5] } },
+                                x: { ticks: { color: '#1e293b', font: { weight: '900', size: 16 } }, grid: { display: false } }
                             }
                         }
                     });
                 });
 
-                document.getElementById('last-updated').innerText = `🕒 동기화 완료: ${new Date().toLocaleTimeString()}`;
-
+                document.getElementById('last-updated').innerText = `🕒 최근 업데이트: ${new Date().toLocaleTimeString()}`;
             } catch (err) {
                 console.error(err);
-                document.getElementById('dashboard-container').innerHTML = `<div class="p-20 text-center font-bold text-rose-500 text-2xl bg-white rounded-3xl border-4 border-rose-100">데이터를 가져오지 못했습니다. 엑셀의 '웹에 게시' 설정을 확인해 주세요!</div>`;
+                document.getElementById('dashboard-container').innerHTML = `<div class="p-20 text-center bg-white rounded-[3rem] shadow-xl border-4 border-rose-100 text-rose-500 font-black text-3xl">데이터 동기화 실패! 구글 시트의 '웹에 게시(CSV)' 상태를 확인하세요.</div>`;
             }
         }
 
-        // 실행 및 1분마다 자동 갱신
-        updateDashboard();
-        setInterval(updateDashboard, 60000);
+        fetchDashboard();
+        setInterval(fetchDashboard, 60000);
     </script>
 </body>
 </html>
