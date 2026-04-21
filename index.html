@@ -3,14 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Together:On 파이프라인 대시보드</title>
+    <title>Together:On 부별 비교 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
         body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
         .sticky-header th { position: sticky; top: 0; background-color: #f1f5f9; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .bar-fill { transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
     </style>
@@ -19,318 +17,188 @@
     <div class="max-w-[1500px] mx-auto">
         <div class="mb-8 flex flex-col md:flex-row items-end justify-between border-b-4 border-slate-800 pb-4">
             <div>
-                <h1 class="text-4xl font-black text-slate-900 tracking-tight">🎯 Together:On 종합 파이프라인</h1>
-                <p class="text-slate-600 mt-3 font-bold text-lg">보안망 우회용 - 데이터 직접 붙여넣기 버전</p>
+                <h1 class="text-4xl font-black text-slate-900 tracking-tight">🎯 Together:On 부별 실적 비교</h1>
+                <p class="text-slate-600 mt-3 font-bold text-lg text-rose-600">회 내의 '부' 단위 비교 시스템 가동 중</p>
+            </div>
+            <div id="status-badge" class="mt-4 md:mt-0 text-right">
+                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">연결 중...</span>
             </div>
         </div>
-
-        <div class="bg-white p-6 rounded-3xl shadow-lg border border-slate-200 mb-10">
-            <h2 class="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <span>📋</span> 구글 시트 데이터를 복사해서 아래에 붙여넣어 주세요!
-            </h2>
-            <p class="text-sm text-slate-500 mb-4 font-medium">방법: 구글 시트를 열고 <b>Ctrl + A (전체선택) -> Ctrl + C (복사)</b> 후, 아래 칸에 <b>Ctrl + V (붙여넣기)</b> 하세요.</p>
-            
-            <textarea id="data-input" class="w-full h-32 p-4 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none mb-4" placeholder="여기에 엑셀 데이터를 붙여넣으세요..."></textarea>
-            
-            <button onclick="processPastedData()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-black text-lg py-4 rounded-xl transition-colors shadow-md">
-                🚀 대시보드 생성하기
-            </button>
-        </div>
-
         <div id="dashboard-container" class="space-y-12">
-            <div class="bg-slate-100/50 rounded-3xl p-10 text-center border-2 border-dashed border-slate-300">
-                <div class="text-5xl mb-4">👆</div>
-                <h2 class="text-xl font-bold text-slate-500">위에 데이터를 붙여넣고 버튼을 누르면 대시보드가 나타납니다.</h2>
+            <div class="bg-white rounded-3xl shadow-xl p-10 text-center animate-pulse">
+                <h2 class="text-2xl font-bold text-slate-700">부별 데이터를 대조 분석하고 있습니다...</h2>
             </div>
         </div>
     </div>
 
     <script>
+        const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
         const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
 
-        const METRICS_MAP = {
-            '찾기': { target: 6, current: 8, color: 'blue', hex: '#3b82f6' },
-            '합자': { target: 11, current: 13, color: 'yellow', hex: '#eab308' },
-            '따기': { target: 16, current: 18, color: 'purple', hex: '#a855f7' },
-            '복음방': { target: 21, current: 23, color: 'orange', hex: '#f97316' },
-            '신카접수': { target: 27, current: 34, color: 'green', hex: '#10b981' }
+        const METRIC_COLORS = {
+            '찾기': { hex: '#3b82f6', color: 'blue' },
+            '합자': { hex: '#eab308', color: 'yellow' },
+            '따기': { hex: '#a855f7', color: 'purple' },
+            '복음방': { hex: '#f97316', color: 'orange' },
+            '신카접수': { hex: '#10b981', color: 'green' }
         };
+
+        function parseCSV(text) {
+            let lines = [], row = [], val = '', inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                let c = text[i], next = text[i+1];
+                if (c === '"' && next === '"') { val += '"'; i++; }
+                else if (c === '"') { inQuotes = !inQuotes; }
+                else if (c === ',' && !inQuotes) { row.push(val); val = ''; }
+                else if ((c === '\n' || c === '\r') && !inQuotes) {
+                    if (c === '\r' && next === '\n') i++;
+                    row.push(val); lines.push(row); row = []; val = '';
+                } else { val += c; }
+            }
+            row.push(val); lines.push(row);
+            return lines;
+        }
 
         function cleanNumber(str) {
             if (!str) return 0;
             return parseInt(str.replace(/[^0-9]/g, '')) || 0;
         }
 
-        // 엑셀에서 복사해온 데이터를 표 형태로 쪼개는 함수
-        function parsePastedText(text) {
-            return text.split('\n').map(row => row.split('\t'));
-        }
-
-        function processPastedData() {
-            const rawText = document.getElementById('data-input').value.trim();
+        async function fetchDashboardData() {
             const container = document.getElementById('dashboard-container');
-
-            if (!rawText) {
-                alert("데이터를 먼저 붙여넣어 주세요!");
-                return;
-            }
-
             try {
-                const rows = parsePastedText(rawText);
+                const response = await fetch(sheetUrl);
+                const csvText = await response.text();
+                const rows = parseCSV(csvText);
                 const dataStore = {};
-                let currentMonth = "진행 현황"; 
-                let lastSeenHoe = ""; 
-                let lastSeenHoeIndex = 3; 
+                let currentMonth = "진행 현황";
+                let lastSeenHoe = "";
+
+                // 좌표 고정 (언빈님 엑셀 기준)
+                const colMap = {
+                    '찾기': { t: 6, c: 8 }, '합자': { t: 11, c: 13 }, '따기': { t: 16, c: 18 },
+                    '복음방': { t: 21, c: 23 }, '신카접수': { t: 27, c: 34 }
+                };
 
                 rows.forEach(row => {
                     let rowStr = row.join('').replace(/\s+/g, '');
                     const monthMatch = rowStr.match(/(1[0-2]|[1-9])월/);
-                    if (monthMatch && !rowStr.includes('목표')) currentMonth = monthMatch[0]; 
-
-                    if (rowStr.includes('소계') || rowStr.includes('합계') || rowStr.includes('총계')) return;
+                    if (monthMatch && !rowStr.includes('목표')) currentMonth = monthMatch[0];
+                    if (rowStr.includes('소계') || rowStr.includes('합계')) return;
 
                     let hoeName = "";
-                    let buName = "";
-                    let isDataRow = false;
-
                     for (let i = 2; i <= 5; i++) {
                         let cell = (row[i] || '').replace(/\s+/g, '');
-                        if (targetHoes.includes(cell)) {
-                            hoeName = cell;
-                            lastSeenHoe = hoeName;
-                            lastSeenHoeIndex = i;
-                            buName = (row[i + 1] || '').trim();
-                            isDataRow = true;
-                            break;
-                        }
+                        if (targetHoes.includes(cell)) { hoeName = cell; lastSeenHoe = hoeName; break; }
+                    }
+                    if (!hoeName && lastSeenHoe) hoeName = lastSeenHoe;
+                    if (!targetHoes.includes(hoeName)) return;
+
+                    let buName = (row[4] || '').trim();
+                    // 부 이름이 없으면 '본부' 또는 '회 전체'로 표시
+                    if (!buName) buName = "본부";
+
+                    if (!dataStore[currentMonth]) dataStore[currentMonth] = {};
+                    if (!dataStore[currentMonth][hoeName]) {
+                        dataStore[currentMonth][hoeName] = { summary: {}, bus: [] };
+                        Object.keys(colMap).forEach(k => dataStore[currentMonth][hoeName].summary[k] = { t:0, c:0 });
                     }
 
-                    if (!isDataRow && lastSeenHoe) {
-                        let possibleBu = (row[lastSeenHoeIndex + 1] || '').trim();
-                        let checkNum1 = parseInt((row[8] || '').replace(/[^0-9]/g, ''));
-                        let checkNum2 = parseInt((row[34] || '').replace(/[^0-9]/g, ''));
-                        
-                        if (possibleBu !== "" || !isNaN(checkNum1) || !isNaN(checkNum2)) {
-                            hoeName = lastSeenHoe;
-                            buName = possibleBu;
-                            isDataRow = true;
-                        }
-                    }
-
-                    if (isDataRow) {
-                        buName = buName === "" ? hoeName + " (전체)" : buName;
-
-                        if (!dataStore[currentMonth]) dataStore[currentMonth] = {};
-                        if (!dataStore[currentMonth][hoeName]) {
-                            dataStore[currentMonth][hoeName] = { summary: {}, bus: [] };
-                            for (let key in METRICS_MAP) {
-                                dataStore[currentMonth][hoeName].summary[key] = { t: 0, c: 0 };
-                            }
-                        }
-
-                        const isDuplicate = dataStore[currentMonth][hoeName].bus.some(b => b.name === buName);
-                        
-                        if (!isDuplicate) {
-                            let buMetrics = {};
-                            let fallbackTotal = cleanNumber(row[5]); 
-
-                            for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
-                                let originalTarget = cleanNumber(row[coords.target]);
-                                let current = cleanNumber(row[coords.current]);
-                                
-                                let finalTarget = originalTarget > 0 ? originalTarget : fallbackTotal;
-                                let isFallback = originalTarget === 0 && fallbackTotal > 0;
-                                let percent = finalTarget > 0 ? Math.min(Math.round((current / finalTarget) * 100), 100) : (current > 0 ? 100 : 0);
-
-                                buMetrics[metricName] = { t: finalTarget, c: current, p: percent, isFallback };
-
-                                dataStore[currentMonth][hoeName].summary[metricName].t += finalTarget;
-                                dataStore[currentMonth][hoeName].summary[metricName].c += current;
-                            }
-                            dataStore[currentMonth][hoeName].bus.push({ name: buName, metrics: buMetrics });
-                        }
-                    }
+                    let buMetrics = {};
+                    let fallbackTotal = cleanNumber(row[5]);
+                    Object.entries(colMap).forEach(([mName, coords]) => {
+                        let t = cleanNumber(row[coords.t]);
+                        let c = cleanNumber(row[coords.c]);
+                        let finalT = t > 0 ? t : fallbackTotal;
+                        let p = finalT > 0 ? Math.min(Math.round((c/finalT)*100), 100) : (c>0?100:0);
+                        buMetrics[mName] = { t: finalT, c, p, isFallback: t===0 };
+                        dataStore[currentMonth][hoeName].summary[mName].t += finalT;
+                        dataStore[currentMonth][hoeName].summary[mName].c += c;
+                    });
+                    dataStore[currentMonth][hoeName].bus.push({ name: buName, metrics: buMetrics });
                 });
-
-                if (Object.keys(dataStore).length === 0) {
-                    throw new Error("붙여넣으신 데이터에서 유효한 부서(부녀회, 장로회 등)를 찾지 못했습니다. 엑셀 전체를 제대로 복사했는지 확인해주세요.");
-                }
 
                 container.innerHTML = '';
-                const chartConfigs = []; 
-
-                function getColorClasses(colorName, percent) {
-                    const colors = {
-                        'blue': { bar: percent >= 100 ? 'bg-blue-600' : 'bg-blue-500', text: 'text-blue-800', bg: 'bg-blue-50' },
-                        'yellow': { bar: percent >= 100 ? 'bg-amber-500' : 'bg-amber-400', text: 'text-amber-800', bg: 'bg-amber-50' },
-                        'purple': { bar: percent >= 100 ? 'bg-purple-600' : 'bg-purple-500', text: 'text-purple-800', bg: 'bg-purple-50' },
-                        'orange': { bar: percent >= 100 ? 'bg-orange-600' : 'bg-orange-500', text: 'text-orange-800', bg: 'bg-orange-50' },
-                        'green': { bar: percent >= 100 ? 'bg-emerald-600' : 'bg-emerald-500', text: 'text-emerald-800', bg: 'bg-emerald-50' },
-                    };
-                    return colors[colorName];
-                }
+                const chartConfigs = [];
 
                 for (const [month, hoes] of Object.entries(dataStore)) {
-                    let monthHtml = `
-                    <div class="mb-20">
-                        <h2 class="text-3xl font-black text-slate-800 border-l-8 border-slate-800 pl-4 mb-8">📅 ${month} 결산</h2>
-                        <div class="space-y-12">
-                    `;
-
+                    container.innerHTML += `<h2 class="text-3xl font-black text-slate-800 border-l-8 border-slate-800 pl-4 mb-8">📅 ${month} 부별 성과비교</h2>`;
+                    
                     for (const [hoeName, hoeData] of Object.entries(hoes)) {
-                        
-                        let summaryBarsHtml = `<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">`;
-                        for (let [metricName, sum] of Object.entries(hoeData.summary)) {
-                            let percent = sum.t > 0 ? Math.min(Math.round((sum.c / sum.t) * 100), 100) : (sum.c > 0 ? 100 : 0);
-                            let colorTheme = getColorClasses(METRICS_MAP[metricName].color, percent);
-                            
-                            summaryBarsHtml += `
-                                <div class="${colorTheme.bg} p-5 rounded-2xl border border-white/50 shadow-sm relative overflow-hidden">
-                                    <div class="text-base font-bold text-slate-700 mb-1">${metricName} 총합</div>
-                                    <div class="flex justify-between items-baseline mb-3 relative z-10">
-                                        <span class="text-3xl font-black ${colorTheme.text}">${sum.c}</span>
-                                        <span class="text-xs font-bold text-slate-600 bg-white/70 px-2 py-1 rounded">/ ${sum.t} (${percent}%)</span>
-                                    </div>
-                                    <div class="w-full bg-white/60 rounded-full h-3 overflow-hidden">
-                                        <div class="${colorTheme.bar} h-full bar-fill" style="width: 0%" data-width="${percent}%"></div>
-                                    </div>
-                                </div>
-                            `;
-                        }
-                        summaryBarsHtml += `</div>`;
-
                         const canvasId = `chart-${month}-${hoeName}`.replace(/[^a-zA-Z0-9]/g, '');
                         
-                        let rankingHtml = `
-                            <div class="bg-white p-6 rounded-2xl border border-slate-200 mb-6 shadow-sm">
-                                <h4 class="text-xl font-black text-slate-800 mb-4 flex items-center gap-2">
-                                    <span>📊</span> 부서별 5단계 달성률(%) 통합 비교
-                                </h4>
-                                <div class="relative w-full h-[350px]">
-                                    <canvas id="${canvasId}"></canvas>
+                        let hoeHtml = `
+                            <div class="bg-white rounded-3xl shadow-lg p-6 md:p-8 border border-slate-200 mb-12">
+                                <div class="flex items-center gap-3 mb-6">
+                                    <div class="w-2 h-8 bg-blue-600 rounded-full"></div>
+                                    <h3 class="text-2xl font-black text-slate-900">${hoeName} 내 부별 비교</h3>
                                 </div>
-                            </div>
-                        `;
-
-                        const labels = hoeData.bus.map(b => b.name);
-                        const datasets = [];
-                        for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
-                            datasets.push({
-                                label: metricName,
-                                data: hoeData.bus.map(b => b.metrics[metricName].p),
-                                backgroundColor: coords.hex + 'B3', 
-                                borderColor: coords.hex,
-                                borderWidth: 1,
-                                borderRadius: 4
-                            });
-                        }
-                        chartConfigs.push({ id: canvasId, labels, datasets });
-
-                        let tableHtml = `
-                            <div class="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
-                                <table class="w-full text-left border-collapse min-w-[1100px]">
-                                    <thead class="sticky-header">
-                                        <tr>
-                                            <th class="p-5 bg-slate-800 text-white font-bold whitespace-nowrap rounded-tl-xl text-center w-36 text-lg">부서명</th>
-                        `;
-                        for (let metricName in METRICS_MAP) {
-                            tableHtml += `<th class="p-5 bg-slate-700 text-slate-100 font-bold text-center whitespace-nowrap border-l border-slate-600 text-lg w-1/5">${metricName}</th>`;
-                        }
-                        tableHtml += `</tr></thead><tbody class="divide-y divide-slate-100">`;
-
-                        hoeData.bus.forEach(bu => {
-                            tableHtml += `
-                                <tr class="hover:bg-slate-50 transition-colors">
-                                    <td class="p-5 font-black text-slate-800 text-center whitespace-nowrap border-r border-slate-100 bg-slate-50/50 text-xl">${bu.name}</td>
-                            `;
-                            for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
-                                let m = bu.metrics[metricName];
-                                let colorTheme = getColorClasses(coords.color, m.p);
-                                let targetLabel = m.isFallback ? `<span title="재적 기준" class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">재적</span>` : '목표';
-                                
-                                tableHtml += `
-                                    <td class="p-5 border-r border-slate-100 last:border-0">
-                                        <div class="flex justify-between items-end mb-3">
-                                            <span class="font-black text-2xl ${colorTheme.text}">${m.c}</span>
-                                            <div class="text-right flex flex-col items-end leading-tight">
-                                                <span class="text-xs font-medium text-slate-500 mb-1">${targetLabel} ${m.t}</span>
-                                                <b class="text-sm ${m.p >= 100 ? 'text-emerald-600' : 'text-slate-600'}">(${m.p}%)</b>
+                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                    <div class="lg:col-span-2 bg-slate-50 p-4 rounded-2xl border">
+                                        <h4 class="text-sm font-bold text-slate-500 mb-4 text-center">부별 5단계 달성률(%) 통합 그래프</h4>
+                                        <div class="h-[350px]"><canvas id="${canvasId}"></canvas></div>
+                                    </div>
+                                    <div class="space-y-4 overflow-y-auto max-h-[400px] pr-2">
+                                        ${hoeData.bus.map(bu => `
+                                            <div class="bg-white p-4 rounded-xl border shadow-sm">
+                                                <div class="font-black text-slate-800 border-b pb-2 mb-3 flex justify-between items-center">
+                                                    <span>${bu.name}</span>
+                                                    <span class="text-xs text-blue-600">신카접수 ${bu.metrics['신카접수'].p}%</span>
+                                                </div>
+                                                <div class="grid grid-cols-5 gap-1 text-[10px] text-center font-bold text-slate-400">
+                                                    <div>찾기</div><div>합자</div><div>따기</div><div>복음방</div><div>신카</div>
+                                                </div>
+                                                <div class="grid grid-cols-5 gap-1 text-center font-black mt-1">
+                                                    <div class="text-blue-600">${bu.metrics['찾기'].c}</div>
+                                                    <div class="text-yellow-600">${bu.metrics['합자'].c}</div>
+                                                    <div class="text-purple-600">${bu.metrics['따기'].c}</div>
+                                                    <div class="text-orange-600">${bu.metrics['복음방'].c}</div>
+                                                    <div class="text-green-600 text-lg">${bu.metrics['신카접수'].c}</div>
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
-                                            <div class="${colorTheme.bar} h-full bar-fill" style="width: 0%" data-width="${m.p}%"></div>
-                                        </div>
-                                    </td>
-                                `;
-                            }
-                            tableHtml += `</tr>`;
-                        });
-                        tableHtml += `</tbody></table></div>`;
-
-                        monthHtml += `
-                            <div class="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 md:p-8 border border-slate-200">
-                                <div class="flex items-center gap-3 mb-8">
-                                    <div class="w-2 h-10 bg-slate-800 rounded-full"></div>
-                                    <h3 class="text-3xl font-black text-slate-900">${hoeName} 종합 파이프라인</h3>
+                                        `).join('')}
+                                    </div>
                                 </div>
-                                ${summaryBarsHtml}
-                                ${rankingHtml} 
-                                ${tableHtml}
                             </div>
                         `;
+                        container.innerHTML += hoeHtml;
+
+                        chartConfigs.push({
+                            id: canvasId,
+                            labels: hoeData.bus.map(b => b.name),
+                            datasets: Object.entries(METRIC_COLORS).map(([mName, theme]) => ({
+                                label: mName,
+                                data: hoeData.bus.map(b => b.metrics[mName].p),
+                                backgroundColor: theme.hex + 'CC',
+                                borderRadius: 5
+                            }))
+                        });
                     }
-                    monthHtml += `</div></div>`;
-                    container.innerHTML += monthHtml;
                 }
 
-                setTimeout(() => {
-                    document.querySelectorAll('.bar-fill').forEach(bar => { bar.style.width = bar.getAttribute('data-width'); });
-                }, 100);
-
-                chartConfigs.forEach(config => {
-                    const ctx = document.getElementById(config.id);
-                    if (ctx) {
-                        new Chart(ctx, {
-                            type: 'bar',
-                            data: {
-                                labels: config.labels,
-                                datasets: config.datasets
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    legend: { position: 'bottom' },
-                                    tooltip: {
-                                        callbacks: { label: function(context) { return context.dataset.label + ': ' + context.parsed.y + '%'; } }
-                                    }
-                                },
-                                scales: {
-                                    y: {
-                                        beginAtZero: true,
-                                        max: 100, 
-                                        ticks: { callback: function(value) { return value + '%'; } }
-                                    }
-                                }
-                            }
-                        });
-                    }
+                chartConfigs.forEach(cfg => {
+                    const ctx = document.getElementById(cfg.id);
+                    if(ctx) new Chart(ctx, { 
+                        type:'bar', 
+                        data: { labels: cfg.labels, datasets: cfg.datasets }, 
+                        options: { 
+                            responsive:true, 
+                            maintainAspectRatio:false, 
+                            plugins: { legend: { position:'top', labels: { boxWidth: 12, font: { weight: 'bold' } } } },
+                            scales: { y: { beginAtZero:true, max:100, ticks: { callback: v => v+'%' } } } 
+                        } 
+                    });
                 });
 
-                // 성공 메시지
-                const now = new Date();
-                document.getElementById('data-input').value = ""; // 성공 시 입력창 비우기
-                document.getElementById('data-input').placeholder = "데이터가 성공적으로 분석되었습니다! (새로운 데이터를 넣으시려면 다시 붙여넣기 하세요)";
-
+                document.getElementById('last-updated').innerText = `🕒 업데이트 완료: ${new Date().toLocaleTimeString()}`;
             } catch (error) {
                 console.error(error);
-                container.innerHTML = `
-                    <div class="p-10 text-center bg-white rounded-3xl border-2 border-rose-200">
-                        <p class="text-rose-500 font-black text-2xl mb-4">🚨 분석 에러가 발생했습니다.</p>
-                        <p class="text-slate-600 font-bold bg-slate-100 p-4 rounded-xl inline-block">에러 원인: ${error.message}</p>
-                    </div>`;
+                container.innerHTML = `<div class="p-10 text-center bg-white rounded-3xl border-2 border-rose-200 font-bold text-rose-500">통신 에러! 구글 시트 웹 게시 설정을 확인해 주세요.</div>`;
             }
         }
+
+        fetchDashboardData();
+        setInterval(fetchDashboardData, 60000);
     </script>
 </body>
 </html>
