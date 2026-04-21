@@ -3,36 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Together:On 대시보드</title>
+    <title>Together:On 전도 파이프라인 종합 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f1f5f9; }
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f0f4f8; }
+        
+        /* 스크롤바 예쁘게 꾸미기 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+        
+        /* 표(Table) 헤더 고정 및 디자인 */
+        .sticky-header th { position: sticky; top: 0; background-color: #f8fafc; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        
+        /* 진행률 바 애니메이션 */
+        .bar-fill { transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        /* 단계별 테마 색상 (CSS 변수로 관리) */
+        .theme-find { background-color: #eff6ff; color: #1d4ed8; } /* 찾기: 파란색 */
+        .theme-relation { background-color: #f5f3ff; color: #6d28d9; } /* 따기: 보라색 */
+        .theme-target { background-color: #fffbeb; color: #b45309; } /* 합자: 노란색 */
+        .theme-room { background-color: #fff7ed; color: #c2410c; } /* 실복음방: 주황색 */
+        .theme-card { background-color: #ecfdf5; color: #047857; } /* 신카접수: 초록색 */
     </style>
 </head>
-<body class="p-4 md:p-8">
-    <div class="max-w-4xl mx-auto">
-        <div class="mb-8 flex items-center justify-between">
-            <h1 class="text-3xl font-extrabold text-slate-800">📊 신카접수 월별 현황</h1>
-            <span class="text-sm text-slate-500 bg-white px-3 py-1 rounded-full shadow-sm border border-slate-200" id="last-updated">업데이트 중...</span>
+<body class="p-2 md:p-6 lg:p-10">
+    <div class="max-w-7xl mx-auto">
+        
+        <div class="mb-8 flex flex-col md:flex-row items-end justify-between border-b-4 border-slate-800 pb-4">
+            <div>
+                <h1 class="text-4xl font-black text-slate-900 tracking-tight">🎯 Together:On 종합 대시보드</h1>
+                <p class="text-slate-600 mt-3 font-bold text-lg">찾기부터 신카접수까지, 각 회/부별 파이프라인 현황</p>
+            </div>
+            <div class="mt-4 md:mt-0 text-right">
+                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">
+                    데이터 스캔 중...
+                </span>
+            </div>
         </div>
 
-        <div id="dashboard-container" class="space-y-8">
-            <div class="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
-                <p class="text-center text-slate-400 py-10">월별 데이터를 분류하고 있습니다...</p>
+        <div id="dashboard-container" class="space-y-12">
+            <div class="bg-white rounded-3xl shadow-xl p-10 text-center animate-pulse">
+                <div class="text-5xl mb-4">⚙️</div>
+                <h2 class="text-2xl font-bold text-slate-700">방대한 데이터를 분석하고 있습니다...</h2>
+                <p class="text-slate-500 mt-2">회별, 부별, 5단계 지표를 모두 정리 중입니다.</p>
             </div>
         </div>
     </div>
 
     <script>
+        // 1. 데이터 소스 (언빈님의 구글 시트 주소)
         const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
 
-        const COL_NAME = 4;     // E열
-        const COL_TARGET = 27;  // AB열 
-        const COL_CURRENT = 34; // AI열 
+        // =====================================================================
+        // 🚨 [가장 중요한 설정 영역: 엑셀 좌표 매핑] 🚨
+        // 언빈님의 실제 엑셀 시트에 맞게 아래 숫자들만 바꿔주시면 평생 쓸 수 있습니다.
+        // * 계산법: A열=0, B열=1, C열=2, D열=3, E열=4...
+        // =====================================================================
 
-        const targetDepts = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
+        // [기준 정보 좌표]
+        const COL_HOE = 3;  // D열 (큰 그룹: "부녀회", "장로회" 등) - 캡처본 기준 유추
+        const COL_BU = 4;   // E열 (작은 그룹: "1부", "2부", "교역자" 등) - 캡처본 기준 유추
+        
+        // [5대 파이프라인 지표 좌표]
+        // 캡처본에서 보인 위치와, 일반적인 양식을 토대로 설정했습니다. 안 맞으면 숫자만 고치세요!
+        const METRICS_MAP = {
+            '찾기': { target: 8, current: 10, color: 'blue' },         // I열(8), K열(10)
+            '따기(관계)': { target: 12, current: 14, color: 'purple' }, // M열(12), O열(14) - 임의 지정
+            '합자': { target: 17, current: 19, color: 'yellow' },      // R열(17), T열(19) - 임의 지정
+            '실복음방': { target: 22, current: 24, color: 'orange' },    // W열(22), Y열(24) - 캡처본 확인
+            '신카접수': { target: 27, current: 34, color: 'green' }      // AB열(27), AI열(34) - 캡처본 확인
+        };
 
+        // 우리가 추적할 큰 그룹(회) 이름들
+        const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
+
+        // =====================================================================
+
+        // CSV 글자를 예쁜 배열(표) 형태로 잘라주는 함수
         function parseCSV(text) {
             let lines = [], row = [], val = '', inQuotes = false;
             for (let i = 0; i < text.length; i++) {
@@ -43,13 +91,19 @@
                 else if ((c === '\n' || c === '\r') && !inQuotes) {
                     if (c === '\r' && next === '\n') i++;
                     row.push(val); lines.push(row); row = []; val = '';
-                } 
-                else { val += c; }
+                } else { val += c; }
             }
             row.push(val); lines.push(row);
             return lines;
         }
 
+        // 숫자 외의 찌꺼기(명, 쉼표 등)를 버리고 순수 숫자만 뽑는 함수
+        function cleanNumber(str) {
+            if (!str) return 0;
+            return parseInt(str.replace(/[^0-9]/g, '')) || 0;
+        }
+
+        // 메인 실행 함수
         async function fetchDashboardData() {
             try {
                 const response = await fetch(sheetUrl);
@@ -57,97 +111,207 @@
                 const rows = parseCSV(csvText);
                 
                 const container = document.getElementById('dashboard-container');
-                container.innerHTML = '';
+                
+                // 데이터를 예쁘게 정리할 거대한 서랍장입니다.
+                // 구조: { "4월": { "부녀회": { summary: {찾기:..., 신카:...}, bus: [ {name:"1부", metrics:{찾기:..., 신카:...}} ] } } }
+                const dataStore = {};
+                let currentMonth = "진행 현황"; 
+                let lastSeenHoe = ""; // ★ 엑셀 '셀 병합' 때문에 빈칸이 생기는 것을 방지하는 기억 장치
 
-                // 월별로 데이터를 모아둘 빈 보관함
-                const monthlyData = {};
-                let currentMonth = "진행 현황"; // 기본 제목
-
+                // 엑셀을 한 줄 한 줄 읽습니다.
                 rows.forEach(row => {
-                    // 1. 몇 월인지 찾기 ('4월', '5월' 글자가 있는 줄을 찾음)
                     const rowString = row.join(' ');
+                    
+                    // 1. 월(Month) 파악하기
                     const monthMatch = rowString.match(/(1[0-2]|[1-9])월/);
                     if (monthMatch && !rowString.includes('목표')) {
-                        currentMonth = monthMatch[0]; // ex) "4월"
+                        currentMonth = monthMatch[0]; 
                     }
 
-                    // 2. 부서 데이터 추출
-                    if (row.length > COL_CURRENT) {
-                        const name = (row[COL_NAME] || '').trim();
+                    // 2. '회(Hoe)'와 '부(Bu)' 파악하기
+                    // 엑셀에서 셀을 병합하면 아래 칸은 빈칸("")이 됩니다. 그걸 방지하기 위해 이전 이름을 기억합니다.
+                    let hoeName = (row[COL_HOE] || '').trim();
+                    if (hoeName && targetHoes.includes(hoeName)) {
+                        lastSeenHoe = hoeName; // 새로운 회가 나타나면 기억함
+                    } else if (!hoeName && lastSeenHoe) {
+                        hoeName = lastSeenHoe; // 빈칸이면 기억해둔 회 이름을 씀 (셀 병합 호환)
+                    }
+
+                    let buName = (row[COL_BU] || '').trim();
+
+                    // 회 이름이 유효하고, 부 이름도 있을 때 (즉, 실제 데이터가 있는 줄일 때)
+                    if (targetHoes.includes(hoeName) && buName !== "") {
                         
-                        if (targetDepts.includes(name)) {
-                            // 해당 월의 보관함이 없으면 만들기
-                            if (!monthlyData[currentMonth]) {
-                                monthlyData[currentMonth] = [];
+                        // 서랍장 세팅 (월 서랍 -> 회 서랍 -> 부 배열)
+                        if (!dataStore[currentMonth]) dataStore[currentMonth] = {};
+                        if (!dataStore[currentMonth][hoeName]) {
+                            dataStore[currentMonth][hoeName] = { 
+                                summary: {}, 
+                                bus: [] 
+                            };
+                            // summary(총합) 초기화
+                            for (let key in METRICS_MAP) {
+                                dataStore[currentMonth][hoeName].summary[key] = { t: 0, c: 0 };
+                            }
+                        }
+
+                        // 해당 '부'가 이미 들어갔는지 확인 (중복 방지)
+                        const isDuplicate = dataStore[currentMonth][hoeName].bus.some(b => b.name === buName);
+                        
+                        if (!isDuplicate) {
+                            let buMetrics = {};
+
+                            // 5개 지표(찾기~신카)를 돌면서 각각의 데이터를 뽑아냅니다.
+                            for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
+                                let target = cleanNumber(row[coords.target]);
+                                let current = cleanNumber(row[coords.current]);
+                                let percent = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : (current > 0 ? 100 : 0);
+
+                                buMetrics[metricName] = { t: target, c: current, p: percent };
+
+                                // 해당 '회(부녀회 전체 등)'의 총합(summary)에도 누적해서 더해줍니다.
+                                dataStore[currentMonth][hoeName].summary[metricName].t += target;
+                                dataStore[currentMonth][hoeName].summary[metricName].c += current;
                             }
 
-                            // 같은 월 안에 중복으로 들어가는 것만 방지
-                            const isDuplicate = monthlyData[currentMonth].some(d => d.name === name);
-                            
-                            if (!isDuplicate) {
-                                let targetStr = (row[COL_TARGET] || '0').replace(/[^0-9]/g, '');
-                                let currentStr = (row[COL_CURRENT] || '0').replace(/[^0-9]/g, '');
-                                
-                                let target = parseInt(targetStr) || 0;
-                                let current = parseInt(currentStr) || 0;
-                                let percent = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : (current > 0 ? 100 : 0);
-                                
-                                monthlyData[currentMonth].push({ name, target, current, percent });
-                            }
+                            // '부(1부 등)'의 데이터를 서랍장에 넣습니다.
+                            dataStore[currentMonth][hoeName].bus.push({ name: buName, metrics: buMetrics });
                         }
                     }
                 });
 
-                // 3. 화면에 월별로 그리기
-                if (Object.keys(monthlyData).length === 0) {
-                    container.innerHTML = '<div class="bg-white rounded-2xl shadow-lg p-6"><p class="text-center text-orange-500 font-bold">부서 데이터를 찾을 수 없습니다.</p></div>';
+                // 데이터가 비어있으면 에러
+                if (Object.keys(dataStore).length === 0) {
+                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">좌표에 맞는 데이터를 찾을 수 없습니다.</p><p class="text-slate-500 mt-2">스크립트 상단의 COL_HOE, COL_BU, METRICS_MAP 좌표를 확인해주세요.</p></div>';
                     return;
                 }
 
-                for (const [month, depts] of Object.entries(monthlyData)) {
+                // =====================================================================
+                // [화면 그리기] 서랍장의 데이터를 꺼내서 HTML로 만듭니다.
+                // =====================================================================
+                container.innerHTML = '';
+
+                // 색상 클래스 가져오는 헬퍼 함수
+                function getColorClasses(colorName, percent) {
+                    const colors = {
+                        'blue': { bar: percent >= 100 ? 'bg-blue-600' : 'bg-blue-400', text: percent >= 100 ? 'text-blue-700' : 'text-blue-500', bg: 'bg-blue-50' },
+                        'purple': { bar: percent >= 100 ? 'bg-purple-600' : 'bg-purple-400', text: percent >= 100 ? 'text-purple-700' : 'text-purple-500', bg: 'bg-purple-50' },
+                        'yellow': { bar: percent >= 100 ? 'bg-amber-500' : 'bg-amber-400', text: percent >= 100 ? 'text-amber-700' : 'text-amber-500', bg: 'bg-amber-50' },
+                        'orange': { bar: percent >= 100 ? 'bg-orange-600' : 'bg-orange-400', text: percent >= 100 ? 'text-orange-700' : 'text-orange-500', bg: 'bg-orange-50' },
+                        'green': { bar: percent >= 100 ? 'bg-emerald-600' : 'bg-emerald-400', text: percent >= 100 ? 'text-emerald-700' : 'text-emerald-500', bg: 'bg-emerald-50' },
+                    };
+                    return colors[colorName];
+                }
+
+                // 1. 월(Month) 루프
+                for (const [month, hoes] of Object.entries(dataStore)) {
+                    
                     let monthHtml = `
-                    <div class="bg-white rounded-2xl shadow-xl p-6 md:p-8 border border-slate-200">
-                        <h2 class="text-2xl font-bold text-blue-800 mb-6 border-b-2 border-blue-100 pb-3">📅 ${month}</h2>
-                        <div class="space-y-5">
+                    <div class="mb-16">
+                        <h2 class="text-3xl font-black text-slate-800 border-l-8 border-slate-800 pl-4 mb-8">📅 ${month} 결산</h2>
+                        <div class="space-y-10">
                     `;
 
-                    depts.forEach(d => {
-                        let barColor = 'bg-orange-500';
-                        if (d.percent >= 100) barColor = 'bg-emerald-500';
-                        else if (d.percent < 50) barColor = 'bg-rose-500';
-                        let displayPercent = d.target > 0 ? `${d.percent}%` : '-';
+                    // 2. 회(Hoe) 루프 (예: 부녀회, 장로회)
+                    for (const [hoeName, hoeData] of Object.entries(hoes)) {
+                        
+                        // [회 전체 종합 요약 바 만들기]
+                        let summaryBarsHtml = `<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">`;
+                        for (let [metricName, sum] of Object.entries(hoeData.summary)) {
+                            let percent = sum.t > 0 ? Math.min(Math.round((sum.c / sum.t) * 100), 100) : (sum.c > 0 ? 100 : 0);
+                            let colorTheme = getColorClasses(METRICS_MAP[metricName].color, percent);
+                            
+                            summaryBarsHtml += `
+                                <div class="${colorTheme.bg} p-4 rounded-xl border border-white/50 shadow-sm">
+                                    <div class="text-sm font-bold text-slate-600 mb-1">${metricName}</div>
+                                    <div class="flex justify-between items-baseline mb-2">
+                                        <span class="text-2xl font-black ${colorTheme.text}">${sum.c}</span>
+                                        <span class="text-xs font-bold text-slate-400">/ ${sum.t} (${percent}%)</span>
+                                    </div>
+                                    <div class="w-full bg-white rounded-full h-2 overflow-hidden">
+                                        <div class="${colorTheme.bar} h-full bar-fill" style="width: 0%" data-width="${percent}%"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        summaryBarsHtml += `</div>`;
 
+                        // [부별 상세 테이블 만들기]
+                        let tableHtml = `
+                            <div class="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
+                                <table class="w-full text-left border-collapse">
+                                    <thead class="sticky-header">
+                                        <tr>
+                                            <th class="p-4 bg-slate-800 text-white font-bold whitespace-nowrap rounded-tl-xl text-center">부서명</th>
+                        `;
+                        // 테이블 헤더 (5개 지표)
+                        for (let metricName in METRICS_MAP) {
+                            tableHtml += `<th class="p-4 bg-slate-700 text-slate-100 font-bold text-center whitespace-nowrap border-l border-slate-600">${metricName}</th>`;
+                        }
+                        tableHtml += `</tr></thead><tbody class="divide-y divide-slate-100">`;
+
+                        // 부(Bu) 행(Row) 생성 (예: 1부, 2부)
+                        hoeData.bus.forEach(bu => {
+                            tableHtml += `
+                                <tr class="hover:bg-slate-50 transition-colors">
+                                    <td class="p-4 font-black text-slate-800 text-center whitespace-nowrap border-r border-slate-100 bg-slate-50/50">${bu.name}</td>
+                            `;
+                            
+                            // 각 지표별 데이터 셀 생성
+                            for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
+                                let m = bu.metrics[metricName];
+                                let colorTheme = getColorClasses(coords.color, m.p);
+                                let displayTarget = m.t > 0 ? m.t : '-';
+                                
+                                tableHtml += `
+                                    <td class="p-4 min-w-[160px] border-r border-slate-100 last:border-0">
+                                        <div class="flex justify-between items-end mb-1">
+                                            <span class="font-black text-lg ${colorTheme.text}">${m.c}</span>
+                                            <span class="text-xs font-medium text-slate-400">목표 ${displayTarget} <b class="${m.p >= 100 ? 'text-emerald-500' : 'text-slate-500'}">(${m.p}%)</b></span>
+                                        </div>
+                                        <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                            <div class="${colorTheme.bar} h-full bar-fill" style="width: 0%" data-width="${m.p}%"></div>
+                                        </div>
+                                    </td>
+                                `;
+                            }
+                            tableHtml += `</tr>`;
+                        });
+                        
+                        tableHtml += `</tbody></table></div>`;
+
+                        // '회' 카드 조립
                         monthHtml += `
-                            <div class="relative">
-                                <div class="flex justify-between items-end mb-2">
-                                    <div class="flex items-center gap-2">
-                                        <span class="font-bold text-slate-700 text-lg w-16">${d.name}</span>
-                                        <span class="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-500 rounded">목표 ${d.target.toLocaleString()}</span>
-                                    </div>
-                                    <div class="text-right">
-                                        <span class="text-xl font-extrabold text-slate-800">${d.current.toLocaleString()}</span>
-                                        <span class="text-sm font-medium text-slate-400 ml-1">명</span>
-                                        <span class="text-sm font-bold ml-2 ${d.percent >= 100 ? 'text-emerald-600' : 'text-orange-500'}">(${displayPercent})</span>
-                                    </div>
+                            <div class="bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] p-6 md:p-8 border border-slate-200">
+                                <div class="flex items-center gap-3 mb-6">
+                                    <div class="w-2 h-8 bg-slate-800 rounded-full"></div>
+                                    <h3 class="text-2xl font-black text-slate-900">${hoeName} 종합 현황</h3>
                                 </div>
-                                <div class="w-full bg-slate-100 rounded-full h-4 shadow-inner">
-                                    <div class="${barColor} h-4 rounded-full transition-all duration-1000" style="width: ${d.percent}%"></div>
-                                </div>
+                                ${summaryBarsHtml}
+                                ${tableHtml}
                             </div>
                         `;
-                    });
-
+                    }
                     monthHtml += `</div></div>`;
                     container.innerHTML += monthHtml;
                 }
 
-                document.getElementById('last-updated').innerText = `최종 갱신: ${new Date().toLocaleTimeString()}`;
+                // 애니메이션 실행 (게이지 차오르기)
+                setTimeout(() => {
+                    document.querySelectorAll('.bar-fill').forEach(bar => { bar.style.width = bar.getAttribute('data-width'); });
+                }, 100);
+
+                // 업데이트 시간 표시
+                const now = new Date();
+                document.getElementById('last-updated').innerText = `🕒 최종 갱신: ${now.getHours()}시 ${now.getMinutes()}분 ${now.getSeconds()}초`;
 
             } catch (error) {
-                document.getElementById('dashboard-container').innerHTML = '<div class="bg-white rounded-2xl shadow-lg p-6"><p class="text-center text-red-500 font-bold">데이터를 분석하는 중 오류가 발생했습니다.</p></div>';
+                console.error("에러:", error);
+                document.getElementById('dashboard-container').innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 통신 에러가 발생했습니다.</p><p class="text-slate-500 mt-2">구글 시트의 [웹에 게시] 설정을 다시 확인해주세요.</p></div>';
             }
         }
 
+        // 초기 1회 실행 및 1분마다 자동 갱신
         fetchDashboardData();
         setInterval(fetchDashboardData, 60000); 
     </script>
