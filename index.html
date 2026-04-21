@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Together:On 파이프라인 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
         body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; }
@@ -19,7 +20,7 @@
         <div class="mb-8 flex flex-col md:flex-row items-end justify-between border-b-4 border-slate-800 pb-4">
             <div>
                 <h1 class="text-4xl font-black text-slate-900 tracking-tight">🎯 Together:On 종합 파이프라인</h1>
-                <p class="text-slate-600 mt-3 font-bold text-lg">찾기부터 신카접수까지, 부서별 5단계 핵심 지표</p>
+                <p class="text-slate-600 mt-3 font-bold text-lg">부서별 5단계 핵심 지표 & 통합 차트 비교 분석</p>
             </div>
             <div class="mt-4 md:mt-0 text-right">
                 <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">최신 데이터 스캔 중...</span>
@@ -28,7 +29,7 @@
         <div id="dashboard-container" class="space-y-12">
             <div class="bg-white rounded-3xl shadow-xl p-10 text-center animate-pulse">
                 <div class="text-5xl mb-4">⚙️</div>
-                <h2 class="text-2xl font-bold text-slate-700">데이터를 정밀 분석하고 있습니다...</h2>
+                <h2 class="text-2xl font-bold text-slate-700">부서별 비교 차트를 생성하고 있습니다...</h2>
             </div>
         </div>
     </div>
@@ -37,13 +38,13 @@
         const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
         const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
 
-        // ★ 언빈님이 짚어주신 정확한 용어와 순서로 매핑 완료!
+        // 정확한 용어와 순서, 색상 매핑
         const METRICS_MAP = {
-            '찾기': { target: 6, current: 8, color: 'blue' },
-            '합자': { target: 11, current: 13, color: 'yellow' },
-            '따기': { target: 16, current: 18, color: 'purple' },
-            '복음방': { target: 21, current: 23, color: 'orange' },
-            '신카접수': { target: 27, current: 34, color: 'green' }
+            '찾기': { target: 6, current: 8, color: 'blue', hex: '#3b82f6' },
+            '합자': { target: 11, current: 13, color: 'yellow', hex: '#eab308' },
+            '따기': { target: 16, current: 18, color: 'purple', hex: '#a855f7' },
+            '복음방': { target: 21, current: 23, color: 'orange', hex: '#f97316' },
+            '신카접수': { target: 27, current: 34, color: 'green', hex: '#10b981' }
         };
 
         function parseCSV(text) {
@@ -161,12 +162,13 @@
                 }
 
                 container.innerHTML = '';
+                const chartConfigs = []; // ★ 그래프 설정을 모아둘 배열
 
                 function getColorClasses(colorName, percent) {
                     const colors = {
                         'blue': { bar: percent >= 100 ? 'bg-blue-600' : 'bg-blue-500', text: 'text-blue-800', bg: 'bg-blue-50' },
-                        'purple': { bar: percent >= 100 ? 'bg-purple-600' : 'bg-purple-500', text: 'text-purple-800', bg: 'bg-purple-50' },
                         'yellow': { bar: percent >= 100 ? 'bg-amber-500' : 'bg-amber-400', text: 'text-amber-800', bg: 'bg-amber-50' },
+                        'purple': { bar: percent >= 100 ? 'bg-purple-600' : 'bg-purple-500', text: 'text-purple-800', bg: 'bg-purple-50' },
                         'orange': { bar: percent >= 100 ? 'bg-orange-600' : 'bg-orange-500', text: 'text-orange-800', bg: 'bg-orange-50' },
                         'green': { bar: percent >= 100 ? 'bg-emerald-600' : 'bg-emerald-500', text: 'text-emerald-800', bg: 'bg-emerald-50' },
                     };
@@ -182,7 +184,7 @@
 
                     for (const [hoeName, hoeData] of Object.entries(hoes)) {
                         
-                        // [1] 상단 요약 (5칸 배치)
+                        // [1] 상단 요약 (5칸)
                         let summaryBarsHtml = `<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">`;
                         for (let [metricName, sum] of Object.entries(hoeData.summary)) {
                             let percent = sum.t > 0 ? Math.min(Math.round((sum.c / sum.t) * 100), 100) : (sum.c > 0 ? 100 : 0);
@@ -203,42 +205,38 @@
                         }
                         summaryBarsHtml += `</div>`;
 
-                        // [2] 랭킹 차트
-                        let sortedBus = [...hoeData.bus].sort((a, b) => b.metrics['신카접수'].p - a.metrics['신카접수'].p);
+                        // [2] ★새로운 기능★: 부서별 파이프라인 통합 비교 차트
+                        const canvasId = `chart-${month}-${hoeName}`.replace(/[^a-zA-Z0-9]/g, '');
                         
                         let rankingHtml = `
-                            <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-6">
-                                <h4 class="text-xl font-black text-slate-800 mb-5 flex items-center gap-2">
-                                    <span>🏆</span> 부서별 신카접수 달성률 순위
+                            <div class="bg-white p-6 rounded-2xl border border-slate-200 mb-6 shadow-sm">
+                                <h4 class="text-xl font-black text-slate-800 mb-4 flex items-center gap-2">
+                                    <span>📊</span> 부서별 5단계 달성률(%) 통합 비교
                                 </h4>
-                                <div class="space-y-5">
+                                <div class="relative w-full h-[350px]">
+                                    <canvas id="${canvasId}"></canvas>
+                                </div>
+                            </div>
                         `;
 
-                        sortedBus.forEach((bu, index) => {
-                            let m = bu.metrics['신카접수'];
-                            let barColor = m.p >= 100 ? 'bg-emerald-500' : (m.p >= 50 ? 'bg-emerald-400' : 'bg-slate-300');
-                            let medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : ''));
-                            
-                            rankingHtml += `
-                                <div class="flex items-center gap-4">
-                                    <div class="w-40 text-left font-bold text-slate-800 text-lg flex items-center gap-2 whitespace-nowrap">
-                                        <span class="w-6">${medal}</span> <span>${bu.name}</span>
-                                    </div>
-                                    <div class="flex-1">
-                                        <div class="flex justify-between text-sm font-bold text-slate-600 mb-1.5">
-                                            <span>${m.c}명 달성</span>
-                                            <span class="${m.p >= 100 ? 'text-emerald-600' : 'text-slate-600'}">${m.p}%</span>
-                                        </div>
-                                        <div class="w-full bg-slate-200 rounded-full h-4 overflow-hidden shadow-inner">
-                                            <div class="${barColor} h-full bar-fill rounded-full" style="width: 0%" data-width="${m.p}%"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                        });
-                        rankingHtml += `</div></div>`;
+                        // 차트에 들어갈 데이터 세팅
+                        const labels = hoeData.bus.map(b => b.name);
+                        const datasets = [];
+                        for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
+                            datasets.push({
+                                label: metricName,
+                                data: hoeData.bus.map(b => b.metrics[metricName].p), // 퍼센트 데이터
+                                backgroundColor: coords.hex + 'CC', // 약간 투명도 적용
+                                borderColor: coords.hex,
+                                borderWidth: 1,
+                                borderRadius: 4
+                            });
+                        }
+                        // 차트 설정 보관
+                        chartConfigs.push({ id: canvasId, labels, datasets });
 
-                        // [3] 하단 표 (가로 너비 확보 및 폰트 크기 최적화)
+
+                        // [3] 하단 상세 표
                         let tableHtml = `
                             <div class="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
                                 <table class="w-full text-left border-collapse min-w-[1100px]">
@@ -287,8 +285,7 @@
                                     <h3 class="text-3xl font-black text-slate-900">${hoeName} 종합 파이프라인</h3>
                                 </div>
                                 ${summaryBarsHtml}
-                                ${rankingHtml}
-                                ${tableHtml}
+                                ${rankingHtml} ${tableHtml}
                             </div>
                         `;
                     }
@@ -296,9 +293,41 @@
                     container.innerHTML += monthHtml;
                 }
 
+                // 표의 막대 애니메이션 실행
                 setTimeout(() => {
                     document.querySelectorAll('.bar-fill').forEach(bar => { bar.style.width = bar.getAttribute('data-width'); });
                 }, 100);
+
+                // ★ Chart.js를 이용해 통합 막대그래프 그리기
+                chartConfigs.forEach(config => {
+                    const ctx = document.getElementById(config.id);
+                    if (ctx) {
+                        new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: config.labels,
+                                datasets: config.datasets
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'bottom' },
+                                    tooltip: {
+                                        callbacks: { label: function(context) { return context.dataset.label + ': ' + context.parsed.y + '%'; } }
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        max: 100, // 최대치는 100%로 고정
+                                        ticks: { callback: function(value) { return value + '%'; } }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
 
                 const now = new Date();
                 document.getElementById('last-updated').innerText = `🕒 최종 갱신: ${now.getHours()}시 ${now.getMinutes()}분 ${now.getSeconds()}초`;
