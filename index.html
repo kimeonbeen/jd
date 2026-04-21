@@ -23,22 +23,22 @@
                 <p class="text-slate-600 mt-3 font-bold text-lg">부서별 5단계 핵심 지표 & 통합 차트 비교 분석</p>
             </div>
             <div class="mt-4 md:mt-0 text-right">
-                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">최신 데이터 스캔 중...</span>
+                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">데이터 스캔 중...</span>
             </div>
         </div>
         <div id="dashboard-container" class="space-y-12">
             <div class="bg-white rounded-3xl shadow-xl p-10 text-center animate-pulse">
                 <div class="text-5xl mb-4">⚙️</div>
-                <h2 class="text-2xl font-bold text-slate-700">데이터와 차트를 구성하고 있습니다...</h2>
+                <h2 class="text-2xl font-bold text-slate-700">구글 시트와 연결 중입니다...</h2>
             </div>
         </div>
     </div>
 
     <script>
+        // ★ 에러의 원인이었던 난수(캐시 우회) 로직을 버리고 가장 순수한 주소만 사용합니다.
         const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
         const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
 
-        // 정확한 용어와 순서, 색상 매핑
         const METRICS_MAP = {
             '찾기': { target: 6, current: 8, color: 'blue', hex: '#3b82f6' },
             '합자': { target: 11, current: 13, color: 'yellow', hex: '#eab308' },
@@ -71,13 +71,13 @@
         async function fetchDashboardData() {
             try {
                 const container = document.getElementById('dashboard-container');
-                const noCacheUrl = sheetUrl + '&_t=' + new Date().getTime(); 
-                const response = await fetch(noCacheUrl);
+                
+                // ★ 구글 서버가 차단하지 않도록 순수 url만 요청합니다.
+                const response = await fetch(sheetUrl);
                 const csvText = await response.text();
 
                 if (csvText.trim().startsWith('<')) {
-                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 시트 접근 에러</p></div>';
-                    return;
+                    throw new Error("구글 시트가 웹 페이지 형태(HTML)로 반환되었습니다. '웹에 게시' 설정을 확인해주세요.");
                 }
 
                 const rows = parseCSV(csvText);
@@ -136,7 +136,7 @@
                         
                         if (!isDuplicate) {
                             let buMetrics = {};
-                            let fallbackTotal = cleanNumber(row[5]); // F열 재적
+                            let fallbackTotal = cleanNumber(row[5]); 
 
                             for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
                                 let originalTarget = cleanNumber(row[coords.target]);
@@ -157,8 +157,7 @@
                 });
 
                 if (Object.keys(dataStore).length === 0) {
-                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 데이터를 찾지 못했습니다.</p></div>';
-                    return;
+                    throw new Error("엑셀에서 '부녀회', '장로회' 등의 부서 데이터를 찾지 못했습니다.");
                 }
 
                 container.innerHTML = '';
@@ -184,7 +183,6 @@
 
                     for (const [hoeName, hoeData] of Object.entries(hoes)) {
                         
-                        // [1] 상단 요약 (5칸)
                         let summaryBarsHtml = `<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">`;
                         for (let [metricName, sum] of Object.entries(hoeData.summary)) {
                             let percent = sum.t > 0 ? Math.min(Math.round((sum.c / sum.t) * 100), 100) : (sum.c > 0 ? 100 : 0);
@@ -205,7 +203,6 @@
                         }
                         summaryBarsHtml += `</div>`;
 
-                        // [2] ★Chart.js 통합 비교 차트 영역
                         const canvasId = `chart-${month}-${hoeName}`.replace(/[^a-zA-Z0-9]/g, '');
                         
                         let rankingHtml = `
@@ -225,7 +222,7 @@
                             datasets.push({
                                 label: metricName,
                                 data: hoeData.bus.map(b => b.metrics[metricName].p),
-                                backgroundColor: coords.hex + 'B3', // 투명도
+                                backgroundColor: coords.hex + 'B3', 
                                 borderColor: coords.hex,
                                 borderWidth: 1,
                                 borderRadius: 4
@@ -233,8 +230,6 @@
                         }
                         chartConfigs.push({ id: canvasId, labels, datasets });
 
-
-                        // [3] 하단 상세 표
                         let tableHtml = `
                             <div class="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
                                 <table class="w-full text-left border-collapse min-w-[1100px]">
@@ -292,12 +287,10 @@
                     container.innerHTML += monthHtml;
                 }
 
-                // 표의 막대 애니메이션 실행
                 setTimeout(() => {
                     document.querySelectorAll('.bar-fill').forEach(bar => { bar.style.width = bar.getAttribute('data-width'); });
                 }, 100);
 
-                // ★ Chart.js 렌더링 (에러 해결됨!)
                 chartConfigs.forEach(config => {
                     const ctx = document.getElementById(config.id);
                     if (ctx) {
@@ -333,7 +326,12 @@
 
             } catch (error) {
                 console.error(error);
-                document.getElementById('dashboard-container').innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 통신 에러가 발생했습니다.</p></div>';
+                // ★ 만약 또 에러가 난다면, 화면에 정확한 이유를 출력하도록 수정했습니다.
+                document.getElementById('dashboard-container').innerHTML = `
+                    <div class="p-10 text-center bg-white rounded-3xl border-2 border-rose-200">
+                        <p class="text-rose-500 font-black text-2xl mb-4">🚨 통신 에러가 발생했습니다.</p>
+                        <p class="text-slate-600 font-bold bg-slate-100 p-4 rounded-xl inline-block">에러 원인: ${error.message}</p>
+                    </div>`;
             }
         }
 
