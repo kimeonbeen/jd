@@ -3,103 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Together:On 실시간 데이터 대시보드</title>
+    <title>Together:On 실시간 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; }
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f1f5f9; }
     </style>
 </head>
 <body class="p-4 md:p-8">
     <div class="max-w-4xl mx-auto">
-        <div class="mb-8 text-center">
-            <h1 class="text-3xl font-bold text-slate-800">📊 실시간 현황 대시보드</h1>
-            <p class="text-slate-500 mt-2" id="last-updated">데이터 불러오는 중...</p>
+        <div class="mb-6 text-center">
+            <h1 class="text-3xl font-bold text-slate-800">📊 실시간 지표 대시보드</h1>
+            <p class="text-slate-500 mt-2" id="last-updated">데이터 동기화 중...</p>
         </div>
 
-        <div class="bg-white rounded-2xl shadow-xl p-6 md:p-8">
-            <div id="dashboard-container" class="space-y-6">
-                <p class="text-center text-slate-400">데이터를 분석하고 있습니다...</p>
-            </div>
-        </div>
-
-        <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <h3 class="font-bold text-blue-800 mb-1">✅ 달성 완료</h3>
-                <p class="text-sm text-blue-600" id="summary-success">목표를 달성한 항목을 계산 중입니다.</p>
-            </div>
-            <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                <h3 class="font-bold text-orange-800 mb-1">⚠️ 보완 필요</h3>
-                <p class="text-sm text-orange-600" id="summary-needed">추가가 필요한 항목을 계산 중입니다.</p>
+        <div class="bg-white rounded-3xl shadow-2xl p-6 md:p-10 border border-slate-100">
+            <div id="dashboard-container" class="space-y-8">
+                <p class="text-center text-slate-400">시트에서 데이터를 정밀 분석 중입니다...</p>
             </div>
         </div>
     </div>
 
     <script>
-        // 언빈님의 구글 스프레드시트 웹 게시 주소
+        // 언빈님의 실제 시트 CSV 경로
         const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
 
         async function fetchDashboardData() {
             try {
                 const response = await fetch(sheetUrl);
-                const data = await response.text();
-                const rows = data.split('\n').slice(1); // 첫 줄(헤더) 제외
+                const csvData = await response.text();
+                const lines = csvData.split('\n');
                 
                 const container = document.getElementById('dashboard-container');
-                container.innerHTML = ''; // 초기화
+                container.innerHTML = '';
 
-                let successItems = [];
-                let neededItems = [];
+                lines.forEach(line => {
+                    const cols = line.split(',');
+                    // 데이터 정제: 항목명(A열), 현재(B열), 목표(C열)가 모두 유효한 경우만 처리
+                    const name = cols[0]?.trim();
+                    const currentStr = cols[1]?.replace(/[^0-9]/g, ''); // 숫자 외 문자 제거
+                    const targetStr = cols[2]?.replace(/[^0-9]/g, '');
+                    
+                    const current = parseInt(currentStr);
+                    const target = parseInt(targetStr);
 
-                rows.forEach(row => {
-                    const columns = row.split(',');
-                    if (columns.length >= 3) {
-                        const name = columns[0].trim();
-                        const current = parseInt(columns[1]) || 0;
-                        const target = parseInt(columns[2]) || 0;
+                    // 유효한 숫자인 경우에만 그래프 생성 (제목줄이나 빈 줄 자동 패스)
+                    if (name && !isNaN(current) && !isNaN(target) && target > 0) {
                         const percent = Math.min(Math.round((current / target) * 100), 100);
+                        
+                        let barColor = 'bg-orange-500';
+                        if (percent >= 100) barColor = 'bg-emerald-500';
+                        else if (percent < 50) barColor = 'bg-rose-500';
 
-                        // 그래프 색상 결정 (이미지처럼 달성률에 따라 변경)
-                        let barColor = 'bg-orange-500'; // 기본 주황
-                        if (percent >= 100) {
-                            barColor = 'bg-green-500'; // 완료 초록
-                            successItems.push(name);
-                        } else if (percent < 50) {
-                            barColor = 'bg-red-500'; // 낮음 빨강
-                            neededItems.push(name);
-                        }
-
-                        // 그래프 HTML 생성
-                        const itemHtml = `
+                        const cardHtml = `
                             <div>
                                 <div class="flex justify-between mb-2 items-end">
                                     <span class="font-bold text-slate-700 text-lg">${name}</span>
                                     <span class="text-sm font-medium text-slate-500">
-                                        <b class="text-slate-800 text-base">${current}</b> / ${target} (${percent}%)
+                                        <b class="text-slate-900 text-lg">${current.toLocaleString()}</b> / ${target.toLocaleString()} (${percent}%)
                                     </span>
                                 </div>
-                                <div class="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
-                                    <div class="${barColor} h-4 rounded-full transition-all duration-1000" style="width: ${percent}%"></div>
+                                <div class="w-full bg-slate-100 rounded-full h-5 shadow-inner">
+                                    <div class="${barColor} h-5 rounded-full transition-all duration-1000" style="width: ${percent}%"></div>
                                 </div>
                             </div>
                         `;
-                        container.innerHTML += itemHtml;
+                        container.innerHTML += cardHtml;
                     }
                 });
 
-                // 요약 텍스트 업데이트
-                document.getElementById('summary-success').innerText = successItems.length > 0 ? successItems.join(', ') + ' 항목 달성 완료!' : '아직 달성된 항목이 없습니다.';
-                document.getElementById('summary-needed').innerText = neededItems.length > 0 ? neededItems.join(', ') + ' 항목의 집중 관리가 필요합니다.' : '모든 항목이 원활하게 진행 중입니다.';
-                document.getElementById('last-updated').innerText = `최종 업데이트: ${new Date().toLocaleString()}`;
+                document.getElementById('last-updated').innerText = `최종 동기화: ${new Date().toLocaleString()}`;
 
             } catch (error) {
-                console.error('데이터 로드 실패:', error);
-                document.getElementById('dashboard-container').innerHTML = '<p class="text-center text-red-500">데이터를 불러오는 데 실패했습니다. 시트 주소나 공개 설정을 확인해주세요.</p>';
+                console.error('에러 발생:', error);
+                document.getElementById('dashboard-container').innerHTML = '<p class="text-center text-red-500 font-bold">시트 데이터를 읽을 수 없습니다. 다시 시도해 주세요.</p>';
             }
         }
 
-        // 페이지 로드 시 실행
         fetchDashboardData();
+        // 1분마다 자동으로 데이터 최신화
+        setInterval(fetchDashboardData, 60000);
     </script>
 </body>
 </html>
