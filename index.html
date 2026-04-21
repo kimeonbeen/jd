@@ -15,11 +15,11 @@
     </style>
 </head>
 <body class="p-4 md:p-8">
-    <div class="max-w-[1400px] mx-auto">
+    <div class="max-w-[1500px] mx-auto">
         <div class="mb-8 flex flex-col md:flex-row items-end justify-between border-b-4 border-slate-800 pb-4">
             <div>
                 <h1 class="text-4xl font-black text-slate-900 tracking-tight">🎯 Together:On 종합 파이프라인</h1>
-                <p class="text-slate-600 mt-3 font-bold text-lg">찾기부터 신카접수까지, 부서별 성과 비교 및 실시간 현황</p>
+                <p class="text-slate-600 mt-3 font-bold text-lg">찾기부터 신카접수까지, 부서별 5단계 핵심 지표</p>
             </div>
             <div class="mt-4 md:mt-0 text-right">
                 <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">최신 데이터 스캔 중...</span>
@@ -28,7 +28,7 @@
         <div id="dashboard-container" class="space-y-12">
             <div class="bg-white rounded-3xl shadow-xl p-10 text-center animate-pulse">
                 <div class="text-5xl mb-4">⚙️</div>
-                <h2 class="text-2xl font-bold text-slate-700">부서별 데이터를 비교 분석하고 있습니다...</h2>
+                <h2 class="text-2xl font-bold text-slate-700">데이터를 정밀 분석하고 있습니다...</h2>
             </div>
         </div>
     </div>
@@ -37,12 +37,12 @@
         const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
         const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
 
-        // 캡처본 기준 확정 좌표
+        // ★ 언빈님이 짚어주신 정확한 용어와 순서로 매핑 완료!
         const METRICS_MAP = {
             '찾기': { target: 6, current: 8, color: 'blue' },
-            '관계맺기': { target: 11, current: 13, color: 'purple' },
-            '합자': { target: 16, current: 18, color: 'yellow' },
-            '실복음방': { target: 21, current: 23, color: 'orange' },
+            '합자': { target: 11, current: 13, color: 'yellow' },
+            '따기': { target: 16, current: 18, color: 'purple' },
+            '복음방': { target: 21, current: 23, color: 'orange' },
             '신카접수': { target: 27, current: 34, color: 'green' }
         };
 
@@ -110,7 +110,6 @@
 
                     if (!isDataRow && lastSeenHoe) {
                         let possibleBu = (row[lastSeenHoeIndex + 1] || '').trim();
-                        // 빈칸 방지: 목표/현재 수치 쪽에 숫자가 있으면 데이터 행으로 인정
                         let checkNum1 = parseInt((row[8] || '').replace(/[^0-9]/g, ''));
                         let checkNum2 = parseInt((row[34] || '').replace(/[^0-9]/g, ''));
                         
@@ -136,7 +135,7 @@
                         
                         if (!isDuplicate) {
                             let buMetrics = {};
-                            let fallbackTotal = cleanNumber(row[5]); // F열 재적 인원
+                            let fallbackTotal = cleanNumber(row[5]); // F열 재적
 
                             for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
                                 let originalTarget = cleanNumber(row[coords.target]);
@@ -157,7 +156,7 @@
                 });
 
                 if (Object.keys(dataStore).length === 0) {
-                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 화면에 표시할 데이터를 찾지 못했습니다.</p></div>';
+                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 데이터를 찾지 못했습니다.</p></div>';
                     return;
                 }
 
@@ -165,11 +164,11 @@
 
                 function getColorClasses(colorName, percent) {
                     const colors = {
-                        'blue': { bar: percent >= 100 ? 'bg-blue-600' : 'bg-blue-400', text: percent >= 100 ? 'text-blue-700' : 'text-blue-500', bg: 'bg-blue-50' },
-                        'purple': { bar: percent >= 100 ? 'bg-purple-600' : 'bg-purple-400', text: percent >= 100 ? 'text-purple-700' : 'text-purple-500', bg: 'bg-purple-50' },
-                        'yellow': { bar: percent >= 100 ? 'bg-amber-500' : 'bg-amber-400', text: percent >= 100 ? 'text-amber-700' : 'text-amber-500', bg: 'bg-amber-50' },
-                        'orange': { bar: percent >= 100 ? 'bg-orange-600' : 'bg-orange-400', text: percent >= 100 ? 'text-orange-700' : 'text-orange-500', bg: 'bg-orange-50' },
-                        'green': { bar: percent >= 100 ? 'bg-emerald-600' : 'bg-emerald-400', text: percent >= 100 ? 'text-emerald-700' : 'text-emerald-500', bg: 'bg-emerald-50' },
+                        'blue': { bar: percent >= 100 ? 'bg-blue-600' : 'bg-blue-500', text: 'text-blue-800', bg: 'bg-blue-50' },
+                        'purple': { bar: percent >= 100 ? 'bg-purple-600' : 'bg-purple-500', text: 'text-purple-800', bg: 'bg-purple-50' },
+                        'yellow': { bar: percent >= 100 ? 'bg-amber-500' : 'bg-amber-400', text: 'text-amber-800', bg: 'bg-amber-50' },
+                        'orange': { bar: percent >= 100 ? 'bg-orange-600' : 'bg-orange-500', text: 'text-orange-800', bg: 'bg-orange-50' },
+                        'green': { bar: percent >= 100 ? 'bg-emerald-600' : 'bg-emerald-500', text: 'text-emerald-800', bg: 'bg-emerald-50' },
                     };
                     return colors[colorName];
                 }
@@ -183,20 +182,20 @@
 
                     for (const [hoeName, hoeData] of Object.entries(hoes)) {
                         
-                        // [1] 상단: 전체 종합 요약 (동일)
+                        // [1] 상단 요약 (5칸 배치)
                         let summaryBarsHtml = `<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">`;
                         for (let [metricName, sum] of Object.entries(hoeData.summary)) {
                             let percent = sum.t > 0 ? Math.min(Math.round((sum.c / sum.t) * 100), 100) : (sum.c > 0 ? 100 : 0);
                             let colorTheme = getColorClasses(METRICS_MAP[metricName].color, percent);
                             
                             summaryBarsHtml += `
-                                <div class="${colorTheme.bg} p-4 rounded-xl border border-white/50 shadow-sm relative overflow-hidden">
-                                    <div class="text-sm font-bold text-slate-600 mb-1">${metricName} 총합</div>
-                                    <div class="flex justify-between items-baseline mb-2 relative z-10">
+                                <div class="${colorTheme.bg} p-5 rounded-2xl border border-white/50 shadow-sm relative overflow-hidden">
+                                    <div class="text-base font-bold text-slate-700 mb-1">${metricName} 총합</div>
+                                    <div class="flex justify-between items-baseline mb-3 relative z-10">
                                         <span class="text-3xl font-black ${colorTheme.text}">${sum.c}</span>
-                                        <span class="text-xs font-bold text-slate-500 bg-white/60 px-2 py-0.5 rounded">/ ${sum.t} (${percent}%)</span>
+                                        <span class="text-xs font-bold text-slate-600 bg-white/70 px-2 py-1 rounded">/ ${sum.t} (${percent}%)</span>
                                     </div>
-                                    <div class="w-full bg-white/60 rounded-full h-2.5 overflow-hidden">
+                                    <div class="w-full bg-white/60 rounded-full h-3 overflow-hidden">
                                         <div class="${colorTheme.bar} h-full bar-fill" style="width: 0%" data-width="${percent}%"></div>
                                     </div>
                                 </div>
@@ -204,16 +203,15 @@
                         }
                         summaryBarsHtml += `</div>`;
 
-                        // [2] ★새로운 기능★: 부서별 신카접수 랭킹 비교 차트
-                        // 부서들을 '신카접수' 달성률(%) 기준으로 내림차순 정렬
+                        // [2] 랭킹 차트
                         let sortedBus = [...hoeData.bus].sort((a, b) => b.metrics['신카접수'].p - a.metrics['신카접수'].p);
                         
                         let rankingHtml = `
-                            <div class="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 mb-6">
-                                <h4 class="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
-                                    <span>🏆</span> 부서별 최종 성과 (신카접수) 비교
+                            <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-6">
+                                <h4 class="text-xl font-black text-slate-800 mb-5 flex items-center gap-2">
+                                    <span>🏆</span> 부서별 신카접수 달성률 순위
                                 </h4>
-                                <div class="space-y-4">
+                                <div class="space-y-5">
                         `;
 
                         sortedBus.forEach((bu, index) => {
@@ -223,15 +221,15 @@
                             
                             rankingHtml += `
                                 <div class="flex items-center gap-4">
-                                    <div class="w-24 text-right font-bold text-slate-700 flex items-center justify-end gap-1">
-                                        ${medal} <span class="truncate">${bu.name}</span>
+                                    <div class="w-40 text-left font-bold text-slate-800 text-lg flex items-center gap-2 whitespace-nowrap">
+                                        <span class="w-6">${medal}</span> <span>${bu.name}</span>
                                     </div>
                                     <div class="flex-1">
-                                        <div class="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                                        <div class="flex justify-between text-sm font-bold text-slate-600 mb-1.5">
                                             <span>${m.c}명 달성</span>
-                                            <span class="${m.p >= 100 ? 'text-emerald-600' : 'text-slate-500'}">${m.p}%</span>
+                                            <span class="${m.p >= 100 ? 'text-emerald-600' : 'text-slate-600'}">${m.p}%</span>
                                         </div>
-                                        <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
+                                        <div class="w-full bg-slate-200 rounded-full h-4 overflow-hidden shadow-inner">
                                             <div class="${barColor} h-full bar-fill rounded-full" style="width: 0%" data-width="${m.p}%"></div>
                                         </div>
                                     </div>
@@ -240,39 +238,39 @@
                         });
                         rankingHtml += `</div></div>`;
 
-                        // [3] 하단: 상세 데이터 표 (동일)
+                        // [3] 하단 표 (가로 너비 확보 및 폰트 크기 최적화)
                         let tableHtml = `
                             <div class="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
-                                <table class="w-full text-left border-collapse min-w-[1000px]">
+                                <table class="w-full text-left border-collapse min-w-[1100px]">
                                     <thead class="sticky-header">
                                         <tr>
-                                            <th class="p-4 bg-slate-800 text-white font-bold whitespace-nowrap rounded-tl-xl text-center w-28">부서명</th>
+                                            <th class="p-5 bg-slate-800 text-white font-bold whitespace-nowrap rounded-tl-xl text-center w-36 text-lg">부서명</th>
                         `;
                         for (let metricName in METRICS_MAP) {
-                            tableHtml += `<th class="p-4 bg-slate-700 text-slate-100 font-bold text-center whitespace-nowrap border-l border-slate-600">${metricName}</th>`;
+                            tableHtml += `<th class="p-5 bg-slate-700 text-slate-100 font-bold text-center whitespace-nowrap border-l border-slate-600 text-lg w-1/5">${metricName}</th>`;
                         }
                         tableHtml += `</tr></thead><tbody class="divide-y divide-slate-100">`;
 
                         hoeData.bus.forEach(bu => {
                             tableHtml += `
                                 <tr class="hover:bg-slate-50 transition-colors">
-                                    <td class="p-4 font-black text-slate-800 text-center whitespace-nowrap border-r border-slate-100 bg-slate-50/50 text-lg">${bu.name}</td>
+                                    <td class="p-5 font-black text-slate-800 text-center whitespace-nowrap border-r border-slate-100 bg-slate-50/50 text-xl">${bu.name}</td>
                             `;
                             for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
                                 let m = bu.metrics[metricName];
                                 let colorTheme = getColorClasses(coords.color, m.p);
-                                let targetLabel = m.isFallback ? `<span title="재적 기준" class="text-[10px] bg-slate-200 text-slate-600 px-1 rounded">재적</span>` : '목표';
+                                let targetLabel = m.isFallback ? `<span title="재적 기준" class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">재적</span>` : '목표';
                                 
                                 tableHtml += `
-                                    <td class="p-4 border-r border-slate-100 last:border-0 w-1/5">
-                                        <div class="flex justify-between items-end mb-2">
+                                    <td class="p-5 border-r border-slate-100 last:border-0">
+                                        <div class="flex justify-between items-end mb-3">
                                             <span class="font-black text-2xl ${colorTheme.text}">${m.c}</span>
                                             <div class="text-right flex flex-col items-end leading-tight">
-                                                <span class="text-xs font-medium text-slate-400">${targetLabel} ${m.t}</span>
-                                                <b class="text-sm ${m.p >= 100 ? 'text-emerald-500' : 'text-slate-600'}">(${m.p}%)</b>
+                                                <span class="text-xs font-medium text-slate-500 mb-1">${targetLabel} ${m.t}</span>
+                                                <b class="text-sm ${m.p >= 100 ? 'text-emerald-600' : 'text-slate-600'}">(${m.p}%)</b>
                                             </div>
                                         </div>
-                                        <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden shadow-inner">
+                                        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
                                             <div class="${colorTheme.bar} h-full bar-fill" style="width: 0%" data-width="${m.p}%"></div>
                                         </div>
                                     </td>
@@ -284,12 +282,13 @@
 
                         monthHtml += `
                             <div class="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 md:p-8 border border-slate-200">
-                                <div class="flex items-center gap-3 mb-6">
-                                    <div class="w-2 h-8 bg-slate-800 rounded-full"></div>
-                                    <h3 class="text-2xl font-black text-slate-900">${hoeName} 종합 파이프라인</h3>
+                                <div class="flex items-center gap-3 mb-8">
+                                    <div class="w-2 h-10 bg-slate-800 rounded-full"></div>
+                                    <h3 class="text-3xl font-black text-slate-900">${hoeName} 종합 파이프라인</h3>
                                 </div>
                                 ${summaryBarsHtml}
-                                ${rankingHtml}  ${tableHtml}
+                                ${rankingHtml}
+                                ${tableHtml}
                             </div>
                         `;
                     }
