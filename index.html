@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Together:On 실시간 대시보드</title>
+    <title>Together:On 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
@@ -12,77 +12,118 @@
 </head>
 <body class="p-4 md:p-8">
     <div class="max-w-4xl mx-auto">
-        <div class="mb-6 text-center">
-            <h1 class="text-3xl font-bold text-slate-800">📊 실시간 지표 대시보드</h1>
-            <p class="text-slate-500 mt-2" id="last-updated">데이터 동기화 중...</p>
+        <div class="mb-8 flex items-center justify-between">
+            <h1 class="text-2xl font-bold text-slate-800">📊 신카접수 현황 대시보드</h1>
+            <span class="text-sm text-slate-500 bg-white px-3 py-1 rounded-full shadow-sm" id="last-updated">업데이트 중...</span>
         </div>
 
-        <div class="bg-white rounded-3xl shadow-2xl p-6 md:p-10 border border-slate-100">
-            <div id="dashboard-container" class="space-y-8">
-                <p class="text-center text-slate-400">시트에서 데이터를 정밀 분석 중입니다...</p>
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+            <div id="dashboard-container" class="space-y-6">
+                <p class="text-center text-slate-400 py-10">마스터 시트의 정확한 위치에서 데이터를 추출하고 있습니다...</p>
             </div>
         </div>
     </div>
 
     <script>
-        // 언빈님의 실제 시트 CSV 경로
         const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
+
+        // ★ 캡처본을 바탕으로 확인한 정확한 열(Column) 좌표입니다 ★
+        const COL_NAME = 4;     // E열 (부서: 교역자, 장로회, 자문회 등)
+        const COL_TARGET = 27;  // AB열 (신카 예정수 목표)
+        const COL_CURRENT = 34; // AI열 (신카 예정수 합계) 
+        // ※ 만약 '신카접수 합계(AQ열)'를 쓰고 싶으시면 COL_CURRENT를 42로 바꾸시면 됩니다.
+
+        // 모니터링할 부서 이름들 (이 이름이 E열에 있을 때만 데이터 추출)
+        const targetDepts = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
+
+        // 복잡한 엑셀(CSV) 완벽 파싱 함수
+        function parseCSV(text) {
+            let lines = [], row = [], val = '', inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                let c = text[i], next = text[i+1];
+                if (c === '"' && next === '"') { val += '"'; i++; }
+                else if (c === '"') { inQuotes = !inQuotes; }
+                else if (c === ',' && !inQuotes) { row.push(val); val = ''; }
+                else if ((c === '\n' || c === '\r') && !inQuotes) {
+                    if (c === '\r' && next === '\n') i++;
+                    row.push(val); lines.push(row); row = []; val = '';
+                } 
+                else { val += c; }
+            }
+            row.push(val); lines.push(row);
+            return lines;
+        }
 
         async function fetchDashboardData() {
             try {
                 const response = await fetch(sheetUrl);
-                const csvData = await response.text();
-                const lines = csvData.split('\n');
+                const csvText = await response.text();
+                const rows = parseCSV(csvText);
                 
                 const container = document.getElementById('dashboard-container');
                 container.innerHTML = '';
 
-                lines.forEach(line => {
-                    const cols = line.split(',');
-                    // 데이터 정제: 항목명(A열), 현재(B열), 목표(C열)가 모두 유효한 경우만 처리
-                    const name = cols[0]?.trim();
-                    const currentStr = cols[1]?.replace(/[^0-9]/g, ''); // 숫자 외 문자 제거
-                    const targetStr = cols[2]?.replace(/[^0-9]/g, '');
-                    
-                    const current = parseInt(currentStr);
-                    const target = parseInt(targetStr);
+                let hasData = false;
 
-                    // 유효한 숫자인 경우에만 그래프 생성 (제목줄이나 빈 줄 자동 패스)
-                    if (name && !isNaN(current) && !isNaN(target) && target > 0) {
-                        const percent = Math.min(Math.round((current / target) * 100), 100);
+                rows.forEach(row => {
+                    if (row.length > COL_CURRENT) {
+                        const name = (row[COL_NAME] || '').trim();
                         
-                        let barColor = 'bg-orange-500';
-                        if (percent >= 100) barColor = 'bg-emerald-500';
-                        else if (percent < 50) barColor = 'bg-rose-500';
+                        // 타겟 부서인지 확인
+                        if (targetDepts.includes(name)) {
+                            // 숫자에서 쉼표나 불필요한 글자 제거 후 숫자로 변환
+                            let targetStr = (row[COL_TARGET] || '0').replace(/[^0-9]/g, '');
+                            let currentStr = (row[COL_CURRENT] || '0').replace(/[^0-9]/g, '');
+                            
+                            let target = parseInt(targetStr) || 0;
+                            let current = parseInt(currentStr) || 0;
 
-                        const cardHtml = `
-                            <div>
-                                <div class="flex justify-between mb-2 items-end">
-                                    <span class="font-bold text-slate-700 text-lg">${name}</span>
-                                    <span class="text-sm font-medium text-slate-500">
-                                        <b class="text-slate-900 text-lg">${current.toLocaleString()}</b> / ${target.toLocaleString()} (${percent}%)
-                                    </span>
+                            // 목표치가 0이어도 현황을 보여주기 위해 렌더링
+                            let percent = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : (current > 0 ? 100 : 0);
+                            let displayPercent = target > 0 ? `${percent}%` : '-';
+
+                            // 색상 로직
+                            let barColor = 'bg-orange-500';
+                            if (percent >= 100) barColor = 'bg-green-600';
+                            else if (percent < 50) barColor = 'bg-red-500';
+
+                            const html = `
+                                <div class="relative">
+                                    <div class="flex justify-between items-end mb-2">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-bold text-slate-700 text-lg w-16">${name}</span>
+                                            <span class="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-500 rounded">목표 ${target.toLocaleString()}</span>
+                                        </div>
+                                        <div class="text-right">
+                                            <span class="text-xl font-extrabold text-slate-800">${current.toLocaleString()}</span>
+                                            <span class="text-sm font-medium text-slate-400 ml-1">명</span>
+                                            <span class="text-sm font-bold ml-2 ${percent >= 100 ? 'text-green-600' : 'text-orange-500'}">(${displayPercent})</span>
+                                        </div>
+                                    </div>
+                                    <div class="w-full bg-slate-100 rounded-full h-4">
+                                        <div class="${barColor} h-4 rounded-full transition-all duration-1000" style="width: ${percent}%"></div>
+                                    </div>
                                 </div>
-                                <div class="w-full bg-slate-100 rounded-full h-5 shadow-inner">
-                                    <div class="${barColor} h-5 rounded-full transition-all duration-1000" style="width: ${percent}%"></div>
-                                </div>
-                            </div>
-                        `;
-                        container.innerHTML += cardHtml;
+                            `;
+                            container.innerHTML += html;
+                            hasData = true;
+                        }
                     }
                 });
 
-                document.getElementById('last-updated').innerText = `최종 동기화: ${new Date().toLocaleString()}`;
+                if (!hasData) {
+                    container.innerHTML = '<p class="text-center text-orange-500 font-bold">지정된 위치(E열, AB열, AI열)에서 부서 데이터를 찾을 수 없습니다.</p>';
+                }
+
+                document.getElementById('last-updated').innerText = `최종 갱신: ${new Date().toLocaleTimeString()}`;
 
             } catch (error) {
-                console.error('에러 발생:', error);
-                document.getElementById('dashboard-container').innerHTML = '<p class="text-center text-red-500 font-bold">시트 데이터를 읽을 수 없습니다. 다시 시도해 주세요.</p>';
+                document.getElementById('dashboard-container').innerHTML = '<p class="text-center text-red-500 font-bold">시트 데이터를 불러오지 못했습니다.</p>';
             }
         }
 
         fetchDashboardData();
-        // 1분마다 자동으로 데이터 최신화
-        setInterval(fetchDashboardData, 60000);
+        setInterval(fetchDashboardData, 60000); // 1분 자동 갱신
     </script>
 </body>
 </html>
