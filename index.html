@@ -19,10 +19,10 @@
         <div class="mb-8 flex flex-col md:flex-row items-end justify-between border-b-4 border-slate-800 pb-4">
             <div>
                 <h1 class="text-4xl font-black text-slate-900 tracking-tight">🎯 Together:On 종합 파이프라인</h1>
-                <p class="text-slate-600 mt-3 font-bold text-lg">찾기부터 신카접수까지, 부서별 리얼타임 대시보드</p>
+                <p class="text-slate-600 mt-3 font-bold text-lg">찾기부터 신카접수까지 실시간 현황 (자동 추적 활성화)</p>
             </div>
             <div class="mt-4 md:mt-0 text-right">
-                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">데이터 스캔 중...</span>
+                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">최신 데이터 강제 스캔 중...</span>
             </div>
         </div>
         <div id="dashboard-container" class="space-y-12">
@@ -36,20 +36,16 @@
     <script>
         const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
 
-        // 🚨 캡처본 5장을 통해 완벽하게 교차 검증된 진짜 좌표입니다 🚨
-        const COL_HOE = 3;  // D열 (회)
-        const COL_BU = 4;   // E열 (부)
-        const COL_TOTAL = 5; // F열 (재적) - 목표가 없을 때 스위칭할 기준 인원
-
-        const METRICS_MAP = {
-            '찾기': { target: 6, current: 8, color: 'blue' },         // G열, I열
-            '관계맺기': { target: 11, current: 13, color: 'purple' }, // L열, N열
-            '합자': { target: 16, current: 18, color: 'yellow' },      // Q열, S열
-            '실복음방': { target: 21, current: 23, color: 'orange' },    // V열, X열
-            '신카접수': { target: 27, current: 34, color: 'green' }      // AB열, AI열
-        };
-
         const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
+
+        // [자동 추적 시스템] 부서 이름이 적힌 곳을 기준으로 '몇 칸 뒤에 있는지' 오프셋만 기록
+        const RELATIVE_MAP = {
+            '찾기': { t: 3, c: 5, color: 'blue' },          // 목표: +3칸, 현재: +5칸
+            '관계맺기': { t: 8, c: 10, color: 'purple' },   // 목표: +8칸, 현재: +10칸
+            '합자': { t: 13, c: 15, color: 'yellow' },      // 목표: +13칸, 현재: +15칸
+            '실복음방': { t: 18, c: 20, color: 'orange' },    // 목표: +18칸, 현재: +20칸
+            '신카접수': { t: 24, c: 31, color: 'green' }      // 목표: +24칸, 현재: +31칸
+        };
 
         function parseCSV(text) {
             let lines = [], row = [], val = '', inQuotes = false;
@@ -74,73 +70,93 @@
 
         async function fetchDashboardData() {
             try {
-                const response = await fetch(sheetUrl);
-                const csvText = await response.text();
-                const rows = parseCSV(csvText);
-                
                 const container = document.getElementById('dashboard-container');
+                
+                // ★ 캐시 방지 (좀비 데이터 차단 로직)
+                const noCacheUrl = sheetUrl + '&_t=' + new Date().getTime();
+                const response = await fetch(noCacheUrl);
+                const csvText = await response.text();
+
+                // 시트 오류 감지
+                if (csvText.trim().startsWith('<')) {
+                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 구글 시트 연결 오류</p><p class="text-slate-500 mt-2">웹에 게시 설정이 끊겼거나 CSV 형태가 아닙니다.</p></div>';
+                    return;
+                }
+
+                const rows = parseCSV(csvText);
                 const dataStore = {};
                 let currentMonth = "진행 현황"; 
                 let lastSeenHoe = ""; 
+                let globalHoeIndex = -1; // 부서 이름이 있는 기준 열(Column)
 
                 rows.forEach(row => {
                     const rowString = row.join(' ');
                     const monthMatch = rowString.match(/(1[0-2]|[1-9])월/);
-                    if (monthMatch && !rowString.includes('목표')) {
-                        currentMonth = monthMatch[0]; 
+                    if (monthMatch && !rowString.includes('목표')) currentMonth = monthMatch[0]; 
+
+                    // ★ 기준열 자동 스캔 엔진
+                    if (globalHoeIndex === -1) {
+                        for (let i = 0; i < row.length; i++) {
+                            let cell = (row[i] || '').replace(/\s+/g, '');
+                            if (targetHoes.includes(cell)) {
+                                globalHoeIndex = i;
+                                break;
+                            }
+                        }
                     }
 
-                    let hoeName = (row[COL_HOE] || '').trim();
-                    if (hoeName && targetHoes.includes(hoeName)) {
-                        lastSeenHoe = hoeName; 
-                    } else if (!hoeName && lastSeenHoe) {
-                        hoeName = lastSeenHoe; 
-                    }
+                    // 찾지 못했다면 D열(3)로 기본값 상정
+                    const hIndex = globalHoeIndex !== -1 ? globalHoeIndex : 3;
 
-                    let buName = (row[COL_BU] || '').trim();
+                    // 병합된 이름 가져오기
+                    let rawHoe = (row[hIndex] || '').replace(/\s+/g, '');
+                    if (rawHoe && targetHoes.includes(rawHoe)) lastSeenHoe = rawHoe; 
+                    else if (!rawHoe && lastSeenHoe) rawHoe = lastSeenHoe; 
 
-                    if (targetHoes.includes(hoeName) && buName !== "") {
+                    let rawBu = (row[hIndex + 1] || '').trim();
+
+                    // 합계, 소계 줄은 계산에서 제외
+                    if (rowString.includes('소계') || rowString.includes('합계')) return;
+
+                    if (targetHoes.includes(rawHoe)) {
+                        // ★ 누락 버그 해결: 하위 부서가 없으면 단일 부서로 등록
+                        let buName = rawBu === "" ? rawHoe + " (단일)" : rawBu;
+
                         if (!dataStore[currentMonth]) dataStore[currentMonth] = {};
-                        if (!dataStore[currentMonth][hoeName]) {
-                            dataStore[currentMonth][hoeName] = { summary: {}, bus: [] };
-                            for (let key in METRICS_MAP) {
-                                dataStore[currentMonth][hoeName].summary[key] = { t: 0, c: 0 };
+                        if (!dataStore[currentMonth][rawHoe]) {
+                            dataStore[currentMonth][rawHoe] = { summary: {}, bus: [] };
+                            for (let key in RELATIVE_MAP) {
+                                dataStore[currentMonth][rawHoe].summary[key] = { t: 0, c: 0 };
                             }
                         }
 
-                        const isDuplicate = dataStore[currentMonth][hoeName].bus.some(b => b.name === buName);
+                        const isDuplicate = dataStore[currentMonth][rawHoe].bus.some(b => b.name === buName);
                         
                         if (!isDuplicate) {
                             let buMetrics = {};
-                            let fallbackTotal = cleanNumber(row[COL_TOTAL]); // F열 재적 인원
+                            let fallbackTotal = cleanNumber(row[hIndex + 2]); // 재적 인원 (기준열 + 2칸)
 
-                            for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
-                                let originalTarget = cleanNumber(row[coords.target]);
-                                let current = cleanNumber(row[coords.current]);
+                            for (let [metricName, offset] of Object.entries(RELATIVE_MAP)) {
+                                let originalTarget = cleanNumber(row[hIndex + offset.t]);
+                                let current = cleanNumber(row[hIndex + offset.c]);
                                 
-                                // ★ 핵심: 목표가 0이거나 없으면 재적 인원으로 목표를 스위칭합니다.
+                                // 목표 스위칭 (목표가 없으면 재적 인원으로)
                                 let finalTarget = originalTarget > 0 ? originalTarget : fallbackTotal;
                                 let isFallback = originalTarget === 0 && fallbackTotal > 0;
-
                                 let percent = finalTarget > 0 ? Math.min(Math.round((current / finalTarget) * 100), 100) : (current > 0 ? 100 : 0);
 
-                                buMetrics[metricName] = { 
-                                    t: finalTarget, 
-                                    c: current, 
-                                    p: percent,
-                                    isFallback: isFallback // 화면에 '재적 기준' 표시를 띄우기 위한 장치
-                                };
+                                buMetrics[metricName] = { t: finalTarget, c: current, p: percent, isFallback };
 
-                                dataStore[currentMonth][hoeName].summary[metricName].t += finalTarget;
-                                dataStore[currentMonth][hoeName].summary[metricName].c += current;
+                                dataStore[currentMonth][rawHoe].summary[metricName].t += finalTarget;
+                                dataStore[currentMonth][rawHoe].summary[metricName].c += current;
                             }
-                            dataStore[currentMonth][hoeName].bus.push({ name: buName, metrics: buMetrics });
+                            dataStore[currentMonth][rawHoe].bus.push({ name: buName, metrics: buMetrics });
                         }
                     }
                 });
 
                 if (Object.keys(dataStore).length === 0) {
-                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">데이터를 가져오지 못했습니다.</p></div>';
+                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 화면에 표시할 수 있는 데이터를 찾지 못했습니다.</p></div>';
                     return;
                 }
 
@@ -168,7 +184,7 @@
                         let summaryBarsHtml = `<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">`;
                         for (let [metricName, sum] of Object.entries(hoeData.summary)) {
                             let percent = sum.t > 0 ? Math.min(Math.round((sum.c / sum.t) * 100), 100) : (sum.c > 0 ? 100 : 0);
-                            let colorTheme = getColorClasses(METRICS_MAP[metricName].color, percent);
+                            let colorTheme = getColorClasses(RELATIVE_MAP[metricName].color, percent);
                             
                             summaryBarsHtml += `
                                 <div class="${colorTheme.bg} p-4 rounded-xl border border-white/50 shadow-sm relative overflow-hidden">
@@ -192,7 +208,7 @@
                                         <tr>
                                             <th class="p-4 bg-slate-800 text-white font-bold whitespace-nowrap rounded-tl-xl text-center w-28">부서명</th>
                         `;
-                        for (let metricName in METRICS_MAP) {
+                        for (let metricName in RELATIVE_MAP) {
                             tableHtml += `<th class="p-4 bg-slate-700 text-slate-100 font-bold text-center whitespace-nowrap border-l border-slate-600">${metricName}</th>`;
                         }
                         tableHtml += `</tr></thead><tbody class="divide-y divide-slate-100">`;
@@ -203,9 +219,9 @@
                                     <td class="p-4 font-black text-slate-800 text-center whitespace-nowrap border-r border-slate-100 bg-slate-50/50 text-lg">${bu.name}</td>
                             `;
                             
-                            for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
+                            for (let [metricName, offset] of Object.entries(RELATIVE_MAP)) {
                                 let m = bu.metrics[metricName];
-                                let colorTheme = getColorClasses(coords.color, m.p);
+                                let colorTheme = getColorClasses(offset.color, m.p);
                                 let targetLabel = m.isFallback ? `<span title="재적 기준" class="text-[10px] bg-slate-200 text-slate-600 px-1 rounded">재적</span>` : '목표';
                                 
                                 tableHtml += `
@@ -251,6 +267,7 @@
                 document.getElementById('last-updated').innerText = `🕒 최종 갱신: ${now.getHours()}시 ${now.getMinutes()}분 ${now.getSeconds()}초`;
 
             } catch (error) {
+                console.error(error);
                 document.getElementById('dashboard-container').innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 데이터를 불러오지 못했습니다.</p></div>';
             }
         }
