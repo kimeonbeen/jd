@@ -13,13 +13,13 @@
 <body class="p-4 md:p-8">
     <div class="max-w-4xl mx-auto">
         <div class="mb-8 flex items-center justify-between">
-            <h1 class="text-2xl font-bold text-slate-800">📊 신카접수 현황 대시보드</h1>
-            <span class="text-sm text-slate-500 bg-white px-3 py-1 rounded-full shadow-sm" id="last-updated">업데이트 중...</span>
+            <h1 class="text-3xl font-extrabold text-slate-800">📊 신카접수 월별 현황</h1>
+            <span class="text-sm text-slate-500 bg-white px-3 py-1 rounded-full shadow-sm border border-slate-200" id="last-updated">업데이트 중...</span>
         </div>
 
-        <div class="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
-            <div id="dashboard-container" class="space-y-6">
-                <p class="text-center text-slate-400 py-10">마스터 시트의 정확한 위치에서 데이터를 추출하고 있습니다...</p>
+        <div id="dashboard-container" class="space-y-8">
+            <div class="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+                <p class="text-center text-slate-400 py-10">월별 데이터를 분류하고 있습니다...</p>
             </div>
         </div>
     </div>
@@ -27,16 +27,12 @@
     <script>
         const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
 
-        // ★ 캡처본을 바탕으로 확인한 정확한 열(Column) 좌표입니다 ★
-        const COL_NAME = 4;     // E열 (부서: 교역자, 장로회, 자문회 등)
-        const COL_TARGET = 27;  // AB열 (신카 예정수 목표)
-        const COL_CURRENT = 34; // AI열 (신카 예정수 합계) 
-        // ※ 만약 '신카접수 합계(AQ열)'를 쓰고 싶으시면 COL_CURRENT를 42로 바꾸시면 됩니다.
+        const COL_NAME = 4;     // E열
+        const COL_TARGET = 27;  // AB열 
+        const COL_CURRENT = 34; // AI열 
 
-        // 모니터링할 부서 이름들 (이 이름이 E열에 있을 때만 데이터 추출)
         const targetDepts = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
 
-        // 복잡한 엑셀(CSV) 완벽 파싱 함수
         function parseCSV(text) {
             let lines = [], row = [], val = '', inQuotes = false;
             for (let i = 0; i < text.length; i++) {
@@ -63,67 +59,97 @@
                 const container = document.getElementById('dashboard-container');
                 container.innerHTML = '';
 
-                let hasData = false;
+                // 월별로 데이터를 모아둘 빈 보관함
+                const monthlyData = {};
+                let currentMonth = "진행 현황"; // 기본 제목
 
                 rows.forEach(row => {
+                    // 1. 몇 월인지 찾기 ('4월', '5월' 글자가 있는 줄을 찾음)
+                    const rowString = row.join(' ');
+                    const monthMatch = rowString.match(/(1[0-2]|[1-9])월/);
+                    if (monthMatch && !rowString.includes('목표')) {
+                        currentMonth = monthMatch[0]; // ex) "4월"
+                    }
+
+                    // 2. 부서 데이터 추출
                     if (row.length > COL_CURRENT) {
                         const name = (row[COL_NAME] || '').trim();
                         
-                        // 타겟 부서인지 확인
                         if (targetDepts.includes(name)) {
-                            // 숫자에서 쉼표나 불필요한 글자 제거 후 숫자로 변환
-                            let targetStr = (row[COL_TARGET] || '0').replace(/[^0-9]/g, '');
-                            let currentStr = (row[COL_CURRENT] || '0').replace(/[^0-9]/g, '');
+                            // 해당 월의 보관함이 없으면 만들기
+                            if (!monthlyData[currentMonth]) {
+                                monthlyData[currentMonth] = [];
+                            }
+
+                            // 같은 월 안에 중복으로 들어가는 것만 방지
+                            const isDuplicate = monthlyData[currentMonth].some(d => d.name === name);
                             
-                            let target = parseInt(targetStr) || 0;
-                            let current = parseInt(currentStr) || 0;
-
-                            // 목표치가 0이어도 현황을 보여주기 위해 렌더링
-                            let percent = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : (current > 0 ? 100 : 0);
-                            let displayPercent = target > 0 ? `${percent}%` : '-';
-
-                            // 색상 로직
-                            let barColor = 'bg-orange-500';
-                            if (percent >= 100) barColor = 'bg-green-600';
-                            else if (percent < 50) barColor = 'bg-red-500';
-
-                            const html = `
-                                <div class="relative">
-                                    <div class="flex justify-between items-end mb-2">
-                                        <div class="flex items-center gap-2">
-                                            <span class="font-bold text-slate-700 text-lg w-16">${name}</span>
-                                            <span class="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-500 rounded">목표 ${target.toLocaleString()}</span>
-                                        </div>
-                                        <div class="text-right">
-                                            <span class="text-xl font-extrabold text-slate-800">${current.toLocaleString()}</span>
-                                            <span class="text-sm font-medium text-slate-400 ml-1">명</span>
-                                            <span class="text-sm font-bold ml-2 ${percent >= 100 ? 'text-green-600' : 'text-orange-500'}">(${displayPercent})</span>
-                                        </div>
-                                    </div>
-                                    <div class="w-full bg-slate-100 rounded-full h-4">
-                                        <div class="${barColor} h-4 rounded-full transition-all duration-1000" style="width: ${percent}%"></div>
-                                    </div>
-                                </div>
-                            `;
-                            container.innerHTML += html;
-                            hasData = true;
+                            if (!isDuplicate) {
+                                let targetStr = (row[COL_TARGET] || '0').replace(/[^0-9]/g, '');
+                                let currentStr = (row[COL_CURRENT] || '0').replace(/[^0-9]/g, '');
+                                
+                                let target = parseInt(targetStr) || 0;
+                                let current = parseInt(currentStr) || 0;
+                                let percent = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : (current > 0 ? 100 : 0);
+                                
+                                monthlyData[currentMonth].push({ name, target, current, percent });
+                            }
                         }
                     }
                 });
 
-                if (!hasData) {
-                    container.innerHTML = '<p class="text-center text-orange-500 font-bold">지정된 위치(E열, AB열, AI열)에서 부서 데이터를 찾을 수 없습니다.</p>';
+                // 3. 화면에 월별로 그리기
+                if (Object.keys(monthlyData).length === 0) {
+                    container.innerHTML = '<div class="bg-white rounded-2xl shadow-lg p-6"><p class="text-center text-orange-500 font-bold">부서 데이터를 찾을 수 없습니다.</p></div>';
+                    return;
+                }
+
+                for (const [month, depts] of Object.entries(monthlyData)) {
+                    let monthHtml = `
+                    <div class="bg-white rounded-2xl shadow-xl p-6 md:p-8 border border-slate-200">
+                        <h2 class="text-2xl font-bold text-blue-800 mb-6 border-b-2 border-blue-100 pb-3">📅 ${month}</h2>
+                        <div class="space-y-5">
+                    `;
+
+                    depts.forEach(d => {
+                        let barColor = 'bg-orange-500';
+                        if (d.percent >= 100) barColor = 'bg-emerald-500';
+                        else if (d.percent < 50) barColor = 'bg-rose-500';
+                        let displayPercent = d.target > 0 ? `${d.percent}%` : '-';
+
+                        monthHtml += `
+                            <div class="relative">
+                                <div class="flex justify-between items-end mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold text-slate-700 text-lg w-16">${d.name}</span>
+                                        <span class="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-500 rounded">목표 ${d.target.toLocaleString()}</span>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="text-xl font-extrabold text-slate-800">${d.current.toLocaleString()}</span>
+                                        <span class="text-sm font-medium text-slate-400 ml-1">명</span>
+                                        <span class="text-sm font-bold ml-2 ${d.percent >= 100 ? 'text-emerald-600' : 'text-orange-500'}">(${displayPercent})</span>
+                                    </div>
+                                </div>
+                                <div class="w-full bg-slate-100 rounded-full h-4 shadow-inner">
+                                    <div class="${barColor} h-4 rounded-full transition-all duration-1000" style="width: ${d.percent}%"></div>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    monthHtml += `</div></div>`;
+                    container.innerHTML += monthHtml;
                 }
 
                 document.getElementById('last-updated').innerText = `최종 갱신: ${new Date().toLocaleTimeString()}`;
 
             } catch (error) {
-                document.getElementById('dashboard-container').innerHTML = '<p class="text-center text-red-500 font-bold">시트 데이터를 불러오지 못했습니다.</p>';
+                document.getElementById('dashboard-container').innerHTML = '<div class="bg-white rounded-2xl shadow-lg p-6"><p class="text-center text-red-500 font-bold">데이터를 분석하는 중 오류가 발생했습니다.</p></div>';
             }
         }
 
         fetchDashboardData();
-        setInterval(fetchDashboardData, 60000); // 1분 자동 갱신
+        setInterval(fetchDashboardData, 60000); 
     </script>
 </body>
 </html>
