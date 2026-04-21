@@ -23,19 +23,18 @@
                 <p class="text-slate-600 mt-3 font-bold text-lg">부서별 5단계 핵심 지표 & 통합 차트 비교 분석</p>
             </div>
             <div class="mt-4 md:mt-0 text-right">
-                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">데이터 스캔 중...</span>
+                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">데이터 안전 스캔 중...</span>
             </div>
         </div>
         <div id="dashboard-container" class="space-y-12">
             <div class="bg-white rounded-3xl shadow-xl p-10 text-center animate-pulse">
-                <div class="text-5xl mb-4">⚙️</div>
-                <h2 class="text-2xl font-bold text-slate-700">구글 시트와 연결 중입니다...</h2>
+                <div class="text-5xl mb-4">🛡️</div>
+                <h2 class="text-2xl font-bold text-slate-700">안전한 연결을 설정하고 있습니다...</h2>
             </div>
         </div>
     </div>
 
     <script>
-        // ★ 에러의 원인이었던 난수(캐시 우회) 로직을 버리고 가장 순수한 주소만 사용합니다.
         const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
         const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
 
@@ -69,15 +68,36 @@
         }
 
         async function fetchDashboardData() {
-            try {
-                const container = document.getElementById('dashboard-container');
-                
-                // ★ 구글 서버가 차단하지 않도록 순수 url만 요청합니다.
-                const response = await fetch(sheetUrl);
-                const csvText = await response.text();
+            const container = document.getElementById('dashboard-container');
+            let csvText = '';
 
+            try {
+                // ★ 1차 시도: 구글 시트 다이렉트 연결
+                const response = await fetch(sheetUrl);
+                if (!response.ok) throw new Error("Direct fetch failed");
+                csvText = await response.text();
+            } catch (error) {
+                console.warn("직접 연결이 차단되었습니다(Failed to fetch). 우회 터널(Proxy)을 가동합니다...");
+                try {
+                    // ★ 2차 시도: 통신 차단 우회 프록시 서버 사용 (무적 코드)
+                    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(sheetUrl);
+                    const proxyResponse = await fetch(proxyUrl);
+                    if (!proxyResponse.ok) throw new Error("프록시 서버도 연결할 수 없습니다.");
+                    csvText = await proxyResponse.text();
+                } catch (proxyError) {
+                    container.innerHTML = `
+                        <div class="p-10 text-center bg-white rounded-3xl border-2 border-rose-200">
+                            <p class="text-rose-500 font-black text-2xl mb-4">🚨 모든 네트워크 연결이 차단되었습니다.</p>
+                            <p class="text-slate-600 mb-2 font-medium">1. 구글 시트 상단 메뉴에서 <b>파일 > 공유 > 웹에 게시</b>가 되어있는지 꼭 확인해주세요!</p>
+                            <p class="text-slate-600 font-medium">2. 인터넷이나 와이파이가 정상인지 확인해주세요.</p>
+                        </div>`;
+                    return;
+                }
+            }
+
+            try {
                 if (csvText.trim().startsWith('<')) {
-                    throw new Error("구글 시트가 웹 페이지 형태(HTML)로 반환되었습니다. '웹에 게시' 설정을 확인해주세요.");
+                    throw new Error("구글 시트가 웹 페이지 형태(HTML)로 반환되었습니다. 파일 > 공유 > 웹에 게시 > 'CSV' 형식을 선택했는지 확인해주세요.");
                 }
 
                 const rows = parseCSV(csvText);
@@ -326,10 +346,9 @@
 
             } catch (error) {
                 console.error(error);
-                // ★ 만약 또 에러가 난다면, 화면에 정확한 이유를 출력하도록 수정했습니다.
                 document.getElementById('dashboard-container').innerHTML = `
                     <div class="p-10 text-center bg-white rounded-3xl border-2 border-rose-200">
-                        <p class="text-rose-500 font-black text-2xl mb-4">🚨 통신 에러가 발생했습니다.</p>
+                        <p class="text-rose-500 font-black text-2xl mb-4">🚨 데이터 분석 중 에러가 발생했습니다.</p>
                         <p class="text-slate-600 font-bold bg-slate-100 p-4 rounded-xl inline-block">에러 원인: ${error.message}</p>
                     </div>`;
             }
