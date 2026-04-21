@@ -3,48 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Together:On 부별 비교 대시보드</title>
+    <title>Together:On 부별 실적 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; }
-        .sticky-header th { position: sticky; top: 0; background-color: #f1f5f9; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .bar-fill { transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f1f5f9; }
+        .bar-fill { transition: width 1.2s ease-in-out; }
     </style>
 </head>
-<body class="p-4 md:p-8">
-    <div class="max-w-[1500px] mx-auto">
-        <div class="mb-8 flex flex-col md:flex-row items-end justify-between border-b-4 border-slate-800 pb-4">
+<body class="p-4 md:p-10">
+    <div class="max-w-[1600px] mx-auto">
+        <div class="mb-10 flex flex-col md:flex-row items-end justify-between border-b-8 border-slate-900 pb-6">
             <div>
-                <h1 class="text-4xl font-black text-slate-900 tracking-tight">🎯 Together:On 부별 실적 비교</h1>
-                <p class="text-slate-600 mt-3 font-bold text-lg text-rose-600">회 내의 '부' 단위 비교 시스템 가동 중</p>
+                <h1 class="text-5xl font-black text-slate-900 tracking-tighter">🎯 Together:On 부별 성과 지표</h1>
+                <p class="text-slate-500 mt-4 font-bold text-xl">실시간 구글 시트 연동 시스템</p>
             </div>
-            <div id="status-badge" class="mt-4 md:mt-0 text-right">
-                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">연결 중...</span>
+            <div class="mt-6 md:mt-0">
+                <div id="last-updated" class="text-sm font-black text-blue-700 bg-blue-50 px-5 py-3 rounded-2xl border-2 border-blue-200 shadow-sm">
+                    데이터 동기화 중...
+                </div>
             </div>
         </div>
-        <div id="dashboard-container" class="space-y-12">
-            <div class="bg-white rounded-3xl shadow-xl p-10 text-center animate-pulse">
-                <h2 class="text-2xl font-bold text-slate-700">부별 데이터를 대조 분석하고 있습니다...</h2>
+
+        <div id="dashboard-container" class="space-y-16">
+            <div class="text-center py-20 bg-white rounded-3xl shadow-inner border-2 border-dashed border-slate-300">
+                <p class="text-2xl font-bold text-slate-400">데이터를 불러오는 중입니다. 잠시만 기다려주세요...</p>
             </div>
         </div>
     </div>
 
     <script>
-        const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
+        // ★ 언빈님이 주신 구글 시트 CSV 주소입니다.
+        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
+        
+        // 분석할 '회' 목록
         const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
 
-        const METRIC_COLORS = {
-            '찾기': { hex: '#3b82f6', color: 'blue' },
-            '합자': { hex: '#eab308', color: 'yellow' },
-            '따기': { hex: '#a855f7', color: 'purple' },
-            '복음방': { hex: '#f97316', color: 'orange' },
-            '신카접수': { hex: '#10b981', color: 'green' }
+        // 5단계 지표 색상 설정
+        const METRICS = {
+            '찾기': { color: '#3b82f6' },
+            '합자': { color: '#eab308' },
+            '따기': { color: '#a855f7' },
+            '복음방': { color: '#f97316' },
+            '신카접수': { color: '#10b981' }
         };
 
+        // CSV 데이터를 읽기 쉽게 쪼개는 함수
         function parseCSV(text) {
-            let lines = [], row = [], val = '', inQuotes = false;
+            const rows = [];
+            let row = [], val = '', inQuotes = false;
             for (let i = 0; i < text.length; i++) {
                 let c = text[i], next = text[i+1];
                 if (c === '"' && next === '"') { val += '"'; i++; }
@@ -52,153 +60,162 @@
                 else if (c === ',' && !inQuotes) { row.push(val); val = ''; }
                 else if ((c === '\n' || c === '\r') && !inQuotes) {
                     if (c === '\r' && next === '\n') i++;
-                    row.push(val); lines.push(row); row = []; val = '';
+                    row.push(val); rows.push(row); row = []; val = '';
                 } else { val += c; }
             }
-            row.push(val); lines.push(row);
-            return lines;
+            row.push(val); rows.push(row);
+            return rows;
         }
 
-        function cleanNumber(str) {
-            if (!str) return 0;
-            return parseInt(str.replace(/[^0-9]/g, '')) || 0;
-        }
+        // 숫자 외의 문자를 제거하고 숫자로 변환
+        function toNum(str) { return parseInt((str || '').replace(/[^0-9]/g, '')) || 0; }
 
-        async function fetchDashboardData() {
-            const container = document.getElementById('dashboard-container');
+        async function updateDashboard() {
             try {
-                const response = await fetch(sheetUrl);
-                const csvText = await response.text();
-                const rows = parseCSV(csvText);
+                const response = await fetch(csvUrl);
+                const text = await response.text();
+                const rows = parseCSV(text);
+                
                 const dataStore = {};
-                let currentMonth = "진행 현황";
-                let lastSeenHoe = "";
+                let lastHoe = "";
 
-                // 좌표 고정 (언빈님 엑셀 기준)
-                const colMap = {
-                    '찾기': { t: 6, c: 8 }, '합자': { t: 11, c: 13 }, '따기': { t: 16, c: 18 },
-                    '복음방': { t: 21, c: 23 }, '신카접수': { t: 27, c: 34 }
-                };
-
+                // 엑셀 가로 줄을 하나씩 읽으며 부(Bu)별 데이터 수집
                 rows.forEach(row => {
-                    let rowStr = row.join('').replace(/\s+/g, '');
-                    const monthMatch = rowStr.match(/(1[0-2]|[1-9])월/);
-                    if (monthMatch && !rowStr.includes('목표')) currentMonth = monthMatch[0];
-                    if (rowStr.includes('소계') || rowStr.includes('합계')) return;
-
-                    let hoeName = "";
-                    for (let i = 2; i <= 5; i++) {
-                        let cell = (row[i] || '').replace(/\s+/g, '');
-                        if (targetHoes.includes(cell)) { hoeName = cell; lastSeenHoe = hoeName; break; }
+                    if (row.length < 10) return;
+                    
+                    // '회' 이름 찾기
+                    let currentHoe = "";
+                    for(let i=2; i<=5; i++) {
+                        let cell = (row[i] || '').replace(/\s/g, '');
+                        if (targetHoes.includes(cell)) { currentHoe = cell; lastHoe = cell; break; }
                     }
-                    if (!hoeName && lastSeenHoe) hoeName = lastSeenHoe;
-                    if (!targetHoes.includes(hoeName)) return;
+                    if (!currentHoe && lastHoe) currentHoe = lastHoe;
+                    if (!targetHoes.includes(currentHoe)) return;
 
-                    let buName = (row[4] || '').trim();
-                    // 부 이름이 없으면 '본부' 또는 '회 전체'로 표시
-                    if (!buName) buName = "본부";
+                    // '부' 이름 찾기 (E열)
+                    let buName = (row[4] || '').trim() || "본부";
+                    if (buName.includes('소계') || buName.includes('합계')) return;
 
-                    if (!dataStore[currentMonth]) dataStore[currentMonth] = {};
-                    if (!dataStore[currentMonth][hoeName]) {
-                        dataStore[currentMonth][hoeName] = { summary: {}, bus: [] };
-                        Object.keys(colMap).forEach(k => dataStore[currentMonth][hoeName].summary[k] = { t:0, c:0 });
-                    }
+                    if (!dataStore[currentHoe]) dataStore[currentHoe] = [];
 
-                    let buMetrics = {};
-                    let fallbackTotal = cleanNumber(row[5]);
-                    Object.entries(colMap).forEach(([mName, coords]) => {
-                        let t = cleanNumber(row[coords.t]);
-                        let c = cleanNumber(row[coords.c]);
-                        let finalT = t > 0 ? t : fallbackTotal;
-                        let p = finalT > 0 ? Math.min(Math.round((c/finalT)*100), 100) : (c>0?100:0);
-                        buMetrics[mName] = { t: finalT, c, p, isFallback: t===0 };
-                        dataStore[currentMonth][hoeName].summary[mName].t += finalT;
-                        dataStore[currentMonth][hoeName].summary[mName].c += c;
-                    });
-                    dataStore[currentMonth][hoeName].bus.push({ name: buName, metrics: buMetrics });
+                    // 5단계 실적 데이터 추출 (고정 좌표: 찾기 8, 합자 13, 따기 18, 복음방 23, 신카 34)
+                    const m = {
+                        '찾기': { t: toNum(row[6]) || toNum(row[5]), c: toNum(row[8]) },
+                        '합자': { t: toNum(row[11]) || toNum(row[5]), c: toNum(row[13]) },
+                        '따기': { t: toNum(row[16]) || toNum(row[5]), c: toNum(row[18]) },
+                        '복음방': { t: toNum(row[21]) || toNum(row[5]), c: toNum(row[23]) },
+                        '신카접수': { t: toNum(row[27]) || toNum(row[5]), c: toNum(row[34]) }
+                    };
+
+                    dataStore[currentHoe].push({ name: buName, metrics: m });
                 });
 
+                const container = document.getElementById('dashboard-container');
                 container.innerHTML = '';
                 const chartConfigs = [];
 
-                for (const [month, hoes] of Object.entries(dataStore)) {
-                    container.innerHTML += `<h2 class="text-3xl font-black text-slate-800 border-l-8 border-slate-800 pl-4 mb-8">📅 ${month} 부별 성과비교</h2>`;
+                // 화면 그리기
+                for (const [hoeName, bus] of Object.entries(dataStore)) {
+                    const canvasId = `chart-${hoeName}`;
                     
-                    for (const [hoeName, hoeData] of Object.entries(hoes)) {
-                        const canvasId = `chart-${month}-${hoeName}`.replace(/[^a-zA-Z0-9]/g, '');
-                        
-                        let hoeHtml = `
-                            <div class="bg-white rounded-3xl shadow-lg p-6 md:p-8 border border-slate-200 mb-12">
-                                <div class="flex items-center gap-3 mb-6">
-                                    <div class="w-2 h-8 bg-blue-600 rounded-full"></div>
-                                    <h3 class="text-2xl font-black text-slate-900">${hoeName} 내 부별 비교</h3>
+                    let hoeHtml = `
+                        <div class="bg-white rounded-[2.5rem] shadow-2xl p-8 border border-slate-200">
+                            <div class="flex items-center gap-4 mb-8">
+                                <div class="w-3 h-12 bg-slate-900 rounded-full"></div>
+                                <h2 class="text-4xl font-black text-slate-900">${hoeName} 부별 성과</h2>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 xl:grid-cols-4 gap-10">
+                                <div class="xl:col-span-3 bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100">
+                                    <h3 class="text-lg font-bold text-slate-500 mb-6 flex items-center gap-2">
+                                        📊 부별 달성률(%) 비교 차트
+                                    </h3>
+                                    <div class="h-[450px]"><canvas id="${canvasId}"></canvas></div>
                                 </div>
-                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                    <div class="lg:col-span-2 bg-slate-50 p-4 rounded-2xl border">
-                                        <h4 class="text-sm font-bold text-slate-500 mb-4 text-center">부별 5단계 달성률(%) 통합 그래프</h4>
-                                        <div class="h-[350px]"><canvas id="${canvasId}"></canvas></div>
-                                    </div>
-                                    <div class="space-y-4 overflow-y-auto max-h-[400px] pr-2">
-                                        ${hoeData.bus.map(bu => `
-                                            <div class="bg-white p-4 rounded-xl border shadow-sm">
-                                                <div class="font-black text-slate-800 border-b pb-2 mb-3 flex justify-between items-center">
-                                                    <span>${bu.name}</span>
-                                                    <span class="text-xs text-blue-600">신카접수 ${bu.metrics['신카접수'].p}%</span>
-                                                </div>
-                                                <div class="grid grid-cols-5 gap-1 text-[10px] text-center font-bold text-slate-400">
-                                                    <div>찾기</div><div>합자</div><div>따기</div><div>복음방</div><div>신카</div>
-                                                </div>
-                                                <div class="grid grid-cols-5 gap-1 text-center font-black mt-1">
-                                                    <div class="text-blue-600">${bu.metrics['찾기'].c}</div>
-                                                    <div class="text-yellow-600">${bu.metrics['합자'].c}</div>
-                                                    <div class="text-purple-600">${bu.metrics['따기'].c}</div>
-                                                    <div class="text-orange-600">${bu.metrics['복음방'].c}</div>
-                                                    <div class="text-green-600 text-lg">${bu.metrics['신카접수'].c}</div>
-                                                </div>
+                                
+                                <div class="space-y-4 overflow-y-auto max-h-[550px] pr-2">
+                                    <h3 class="text-lg font-bold text-slate-800 mb-4 px-2">📍 부별 상세 (신카접수 순)</h3>
+                                    ${bus.sort((a,b) => b.metrics['신카접수'].c - a.metrics['신카접수'].c).map(bu => `
+                                        <div class="bg-white p-5 rounded-2xl border-2 border-slate-100 shadow-sm hover:border-blue-400 transition-all group">
+                                            <div class="flex justify-between items-center mb-4">
+                                                <span class="text-xl font-black text-slate-800">${bu.name}</span>
+                                                <span class="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">신카 ${bu.metrics['신카접수'].c}명</span>
                                             </div>
-                                        `).join('')}
-                                    </div>
+                                            <div class="space-y-3">
+                                                ${Object.entries(METRICS).map(([mName, theme]) => {
+                                                    const val = bu.metrics[mName];
+                                                    const pct = val.t > 0 ? Math.min(Math.round((val.c/val.t)*100), 100) : 0;
+                                                    return `
+                                                        <div>
+                                                            <div class="flex justify-between text-[11px] font-bold text-slate-500 mb-1">
+                                                                <span>${mName}</span>
+                                                                <span>${val.c} / ${val.t}</span>
+                                                            </div>
+                                                            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                                                <div class="h-full bar-fill" style="background-color:${theme.color}; width:${pct}%"></div>
+                                                            </div>
+                                                        </div>
+                                                    `;
+                                                }).join('')}
+                                            </div>
+                                        </div>
+                                    `).join('')}
                                 </div>
                             </div>
-                        `;
-                        container.innerHTML += hoeHtml;
+                        </div>
+                    `;
+                    container.innerHTML += hoeHtml;
 
-                        chartConfigs.push({
-                            id: canvasId,
-                            labels: hoeData.bus.map(b => b.name),
-                            datasets: Object.entries(METRIC_COLORS).map(([mName, theme]) => ({
-                                label: mName,
-                                data: hoeData.bus.map(b => b.metrics[mName].p),
-                                backgroundColor: theme.hex + 'CC',
-                                borderRadius: 5
-                            }))
-                        });
-                    }
+                    // 차트 데이터 준비
+                    chartConfigs.push({
+                        id: canvasId,
+                        labels: bus.map(b => b.name),
+                        datasets: Object.entries(METRICS).map(([mName, theme]) => ({
+                            label: mName,
+                            data: bus.map(b => {
+                                const v = b.metrics[mName];
+                                return v.t > 0 ? Math.round((v.c/v.t)*100) : 0;
+                            }),
+                            backgroundColor: theme.color + 'DD',
+                            borderRadius: 8,
+                            barPercentage: 0.8,
+                            categoryPercentage: 0.8
+                        }))
+                    });
                 }
 
+                // 차트 생성
                 chartConfigs.forEach(cfg => {
                     const ctx = document.getElementById(cfg.id);
-                    if(ctx) new Chart(ctx, { 
-                        type:'bar', 
-                        data: { labels: cfg.labels, datasets: cfg.datasets }, 
-                        options: { 
-                            responsive:true, 
-                            maintainAspectRatio:false, 
-                            plugins: { legend: { position:'top', labels: { boxWidth: 12, font: { weight: 'bold' } } } },
-                            scales: { y: { beginAtZero:true, max:100, ticks: { callback: v => v+'%' } } } 
-                        } 
+                    if(ctx) new Chart(ctx, {
+                        type: 'bar',
+                        data: { labels: cfg.labels, datasets: cfg.datasets },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'top', labels: { font: { size: 14, weight: 'bold' }, usePointStyle: true } },
+                                tooltip: { titleFont: { size: 16 }, bodyFont: { size: 14 }, padding: 15 }
+                            },
+                            scales: {
+                                y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', font: { weight: 'bold' } } },
+                                x: { ticks: { font: { size: 15, weight: '900' } } }
+                            }
+                        }
                     });
                 });
 
-                document.getElementById('last-updated').innerText = `🕒 업데이트 완료: ${new Date().toLocaleTimeString()}`;
-            } catch (error) {
-                console.error(error);
-                container.innerHTML = `<div class="p-10 text-center bg-white rounded-3xl border-2 border-rose-200 font-bold text-rose-500">통신 에러! 구글 시트 웹 게시 설정을 확인해 주세요.</div>`;
+                document.getElementById('last-updated').innerText = `🕒 동기화 완료: ${new Date().toLocaleTimeString()}`;
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('dashboard-container').innerHTML = `<div class="p-20 text-center font-bold text-rose-500 text-2xl bg-white rounded-3xl border-4 border-rose-100">데이터를 가져오지 못했습니다. 엑셀의 '웹에 게시' 설정을 확인해 주세요!</div>`;
             }
         }
 
-        fetchDashboardData();
-        setInterval(fetchDashboardData, 60000);
+        // 실행 및 1분마다 자동 갱신
+        updateDashboard();
+        setInterval(updateDashboard, 60000);
     </script>
 </body>
 </html>
