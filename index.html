@@ -20,22 +20,32 @@
         <div class="mb-8 flex flex-col md:flex-row items-end justify-between border-b-4 border-slate-800 pb-4">
             <div>
                 <h1 class="text-4xl font-black text-slate-900 tracking-tight">🎯 Together:On 종합 파이프라인</h1>
-                <p class="text-slate-600 mt-3 font-bold text-lg">부서별 5단계 핵심 지표 & 통합 차트 비교 분석</p>
-            </div>
-            <div class="mt-4 md:mt-0 text-right">
-                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">데이터 안전 스캔 중...</span>
+                <p class="text-slate-600 mt-3 font-bold text-lg">보안망 우회용 - 데이터 직접 붙여넣기 버전</p>
             </div>
         </div>
+
+        <div class="bg-white p-6 rounded-3xl shadow-lg border border-slate-200 mb-10">
+            <h2 class="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <span>📋</span> 구글 시트 데이터를 복사해서 아래에 붙여넣어 주세요!
+            </h2>
+            <p class="text-sm text-slate-500 mb-4 font-medium">방법: 구글 시트를 열고 <b>Ctrl + A (전체선택) -> Ctrl + C (복사)</b> 후, 아래 칸에 <b>Ctrl + V (붙여넣기)</b> 하세요.</p>
+            
+            <textarea id="data-input" class="w-full h-32 p-4 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none mb-4" placeholder="여기에 엑셀 데이터를 붙여넣으세요..."></textarea>
+            
+            <button onclick="processPastedData()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-black text-lg py-4 rounded-xl transition-colors shadow-md">
+                🚀 대시보드 생성하기
+            </button>
+        </div>
+
         <div id="dashboard-container" class="space-y-12">
-            <div class="bg-white rounded-3xl shadow-xl p-10 text-center animate-pulse">
-                <div class="text-5xl mb-4">🛡️</div>
-                <h2 class="text-2xl font-bold text-slate-700">안전한 연결을 설정하고 있습니다...</h2>
+            <div class="bg-slate-100/50 rounded-3xl p-10 text-center border-2 border-dashed border-slate-300">
+                <div class="text-5xl mb-4">👆</div>
+                <h2 class="text-xl font-bold text-slate-500">위에 데이터를 붙여넣고 버튼을 누르면 대시보드가 나타납니다.</h2>
             </div>
         </div>
     </div>
 
     <script>
-        const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
         const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
 
         const METRICS_MAP = {
@@ -46,61 +56,27 @@
             '신카접수': { target: 27, current: 34, color: 'green', hex: '#10b981' }
         };
 
-        function parseCSV(text) {
-            let lines = [], row = [], val = '', inQuotes = false;
-            for (let i = 0; i < text.length; i++) {
-                let c = text[i], next = text[i+1];
-                if (c === '"' && next === '"') { val += '"'; i++; }
-                else if (c === '"') { inQuotes = !inQuotes; }
-                else if (c === ',' && !inQuotes) { row.push(val); val = ''; }
-                else if ((c === '\n' || c === '\r') && !inQuotes) {
-                    if (c === '\r' && next === '\n') i++;
-                    row.push(val); lines.push(row); row = []; val = '';
-                } else { val += c; }
-            }
-            row.push(val); lines.push(row);
-            return lines;
-        }
-
         function cleanNumber(str) {
             if (!str) return 0;
             return parseInt(str.replace(/[^0-9]/g, '')) || 0;
         }
 
-        async function fetchDashboardData() {
-            const container = document.getElementById('dashboard-container');
-            let csvText = '';
+        // 엑셀에서 복사해온 데이터를 표 형태로 쪼개는 함수
+        function parsePastedText(text) {
+            return text.split('\n').map(row => row.split('\t'));
+        }
 
-            try {
-                // ★ 1차 시도: 구글 시트 다이렉트 연결
-                const response = await fetch(sheetUrl);
-                if (!response.ok) throw new Error("Direct fetch failed");
-                csvText = await response.text();
-            } catch (error) {
-                console.warn("직접 연결이 차단되었습니다(Failed to fetch). 우회 터널(Proxy)을 가동합니다...");
-                try {
-                    // ★ 2차 시도: 통신 차단 우회 프록시 서버 사용 (무적 코드)
-                    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(sheetUrl);
-                    const proxyResponse = await fetch(proxyUrl);
-                    if (!proxyResponse.ok) throw new Error("프록시 서버도 연결할 수 없습니다.");
-                    csvText = await proxyResponse.text();
-                } catch (proxyError) {
-                    container.innerHTML = `
-                        <div class="p-10 text-center bg-white rounded-3xl border-2 border-rose-200">
-                            <p class="text-rose-500 font-black text-2xl mb-4">🚨 모든 네트워크 연결이 차단되었습니다.</p>
-                            <p class="text-slate-600 mb-2 font-medium">1. 구글 시트 상단 메뉴에서 <b>파일 > 공유 > 웹에 게시</b>가 되어있는지 꼭 확인해주세요!</p>
-                            <p class="text-slate-600 font-medium">2. 인터넷이나 와이파이가 정상인지 확인해주세요.</p>
-                        </div>`;
-                    return;
-                }
+        function processPastedData() {
+            const rawText = document.getElementById('data-input').value.trim();
+            const container = document.getElementById('dashboard-container');
+
+            if (!rawText) {
+                alert("데이터를 먼저 붙여넣어 주세요!");
+                return;
             }
 
             try {
-                if (csvText.trim().startsWith('<')) {
-                    throw new Error("구글 시트가 웹 페이지 형태(HTML)로 반환되었습니다. 파일 > 공유 > 웹에 게시 > 'CSV' 형식을 선택했는지 확인해주세요.");
-                }
-
-                const rows = parseCSV(csvText);
+                const rows = parsePastedText(rawText);
                 const dataStore = {};
                 let currentMonth = "진행 현황"; 
                 let lastSeenHoe = ""; 
@@ -177,7 +153,7 @@
                 });
 
                 if (Object.keys(dataStore).length === 0) {
-                    throw new Error("엑셀에서 '부녀회', '장로회' 등의 부서 데이터를 찾지 못했습니다.");
+                    throw new Error("붙여넣으신 데이터에서 유효한 부서(부녀회, 장로회 등)를 찾지 못했습니다. 엑셀 전체를 제대로 복사했는지 확인해주세요.");
                 }
 
                 container.innerHTML = '';
@@ -341,21 +317,20 @@
                     }
                 });
 
+                // 성공 메시지
                 const now = new Date();
-                document.getElementById('last-updated').innerText = `🕒 최종 갱신: ${now.getHours()}시 ${now.getMinutes()}분 ${now.getSeconds()}초`;
+                document.getElementById('data-input').value = ""; // 성공 시 입력창 비우기
+                document.getElementById('data-input').placeholder = "데이터가 성공적으로 분석되었습니다! (새로운 데이터를 넣으시려면 다시 붙여넣기 하세요)";
 
             } catch (error) {
                 console.error(error);
-                document.getElementById('dashboard-container').innerHTML = `
+                container.innerHTML = `
                     <div class="p-10 text-center bg-white rounded-3xl border-2 border-rose-200">
-                        <p class="text-rose-500 font-black text-2xl mb-4">🚨 데이터 분석 중 에러가 발생했습니다.</p>
+                        <p class="text-rose-500 font-black text-2xl mb-4">🚨 분석 에러가 발생했습니다.</p>
                         <p class="text-slate-600 font-bold bg-slate-100 p-4 rounded-xl inline-block">에러 원인: ${error.message}</p>
                     </div>`;
             }
         }
-
-        fetchDashboardData();
-        setInterval(fetchDashboardData, 60000); 
     </script>
 </body>
 </html>
