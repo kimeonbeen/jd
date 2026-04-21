@@ -19,32 +19,31 @@
         <div class="mb-8 flex flex-col md:flex-row items-end justify-between border-b-4 border-slate-800 pb-4">
             <div>
                 <h1 class="text-4xl font-black text-slate-900 tracking-tight">🎯 Together:On 종합 파이프라인</h1>
-                <p class="text-slate-600 mt-3 font-bold text-lg">찾기부터 신카접수까지 실시간 현황 (자동 추적 활성화)</p>
+                <p class="text-slate-600 mt-3 font-bold text-lg">찾기부터 신카접수까지, 부서별 성과 비교 및 실시간 현황</p>
             </div>
             <div class="mt-4 md:mt-0 text-right">
-                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">최신 데이터 강제 스캔 중...</span>
+                <span class="text-sm font-bold text-slate-500 bg-white px-4 py-2 rounded-lg shadow border" id="last-updated">최신 데이터 스캔 중...</span>
             </div>
         </div>
         <div id="dashboard-container" class="space-y-12">
             <div class="bg-white rounded-3xl shadow-xl p-10 text-center animate-pulse">
                 <div class="text-5xl mb-4">⚙️</div>
-                <h2 class="text-2xl font-bold text-slate-700">시트를 분석하고 있습니다...</h2>
+                <h2 class="text-2xl font-bold text-slate-700">부서별 데이터를 비교 분석하고 있습니다...</h2>
             </div>
         </div>
     </div>
 
     <script>
         const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSnxoHg0L06H0dgV1EMgq_Cljtxwqk_556XYXWciWj84o8msSIfkkdPnj2peZjuLA7zhg3Cr2ZvH4LX/pub?output=csv';
-
         const targetHoes = ['교역자', '장로회', '자문회', '장년회', '부녀회', '청년회'];
 
-        // [자동 추적 시스템] 부서 이름이 적힌 곳을 기준으로 '몇 칸 뒤에 있는지' 오프셋만 기록
-        const RELATIVE_MAP = {
-            '찾기': { t: 3, c: 5, color: 'blue' },          // 목표: +3칸, 현재: +5칸
-            '관계맺기': { t: 8, c: 10, color: 'purple' },   // 목표: +8칸, 현재: +10칸
-            '합자': { t: 13, c: 15, color: 'yellow' },      // 목표: +13칸, 현재: +15칸
-            '실복음방': { t: 18, c: 20, color: 'orange' },    // 목표: +18칸, 현재: +20칸
-            '신카접수': { t: 24, c: 31, color: 'green' }      // 목표: +24칸, 현재: +31칸
+        // 캡처본 기준 확정 좌표
+        const METRICS_MAP = {
+            '찾기': { target: 6, current: 8, color: 'blue' },
+            '관계맺기': { target: 11, current: 13, color: 'purple' },
+            '합자': { target: 16, current: 18, color: 'yellow' },
+            '실복음방': { target: 21, current: 23, color: 'orange' },
+            '신카접수': { target: 27, current: 34, color: 'green' }
         };
 
         function parseCSV(text) {
@@ -71,15 +70,12 @@
         async function fetchDashboardData() {
             try {
                 const container = document.getElementById('dashboard-container');
-                
-                // ★ 캐시 방지 (좀비 데이터 차단 로직)
-                const noCacheUrl = sheetUrl + '&_t=' + new Date().getTime();
+                const noCacheUrl = sheetUrl + '&_t=' + new Date().getTime(); 
                 const response = await fetch(noCacheUrl);
                 const csvText = await response.text();
 
-                // 시트 오류 감지
                 if (csvText.trim().startsWith('<')) {
-                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 구글 시트 연결 오류</p><p class="text-slate-500 mt-2">웹에 게시 설정이 끊겼거나 CSV 형태가 아닙니다.</p></div>';
+                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 시트 접근 에러</p></div>';
                     return;
                 }
 
@@ -87,76 +83,81 @@
                 const dataStore = {};
                 let currentMonth = "진행 현황"; 
                 let lastSeenHoe = ""; 
-                let globalHoeIndex = -1; // 부서 이름이 있는 기준 열(Column)
+                let lastSeenHoeIndex = 3; 
 
                 rows.forEach(row => {
-                    const rowString = row.join(' ');
-                    const monthMatch = rowString.match(/(1[0-2]|[1-9])월/);
-                    if (monthMatch && !rowString.includes('목표')) currentMonth = monthMatch[0]; 
+                    let rowStr = row.join('').replace(/\s+/g, '');
+                    const monthMatch = rowStr.match(/(1[0-2]|[1-9])월/);
+                    if (monthMatch && !rowStr.includes('목표')) currentMonth = monthMatch[0]; 
 
-                    // ★ 기준열 자동 스캔 엔진
-                    if (globalHoeIndex === -1) {
-                        for (let i = 0; i < row.length; i++) {
-                            let cell = (row[i] || '').replace(/\s+/g, '');
-                            if (targetHoes.includes(cell)) {
-                                globalHoeIndex = i;
-                                break;
-                            }
+                    if (rowStr.includes('소계') || rowStr.includes('합계') || rowStr.includes('총계')) return;
+
+                    let hoeName = "";
+                    let buName = "";
+                    let isDataRow = false;
+
+                    for (let i = 2; i <= 5; i++) {
+                        let cell = (row[i] || '').replace(/\s+/g, '');
+                        if (targetHoes.includes(cell)) {
+                            hoeName = cell;
+                            lastSeenHoe = hoeName;
+                            lastSeenHoeIndex = i;
+                            buName = (row[i + 1] || '').trim();
+                            isDataRow = true;
+                            break;
                         }
                     }
 
-                    // 찾지 못했다면 D열(3)로 기본값 상정
-                    const hIndex = globalHoeIndex !== -1 ? globalHoeIndex : 3;
+                    if (!isDataRow && lastSeenHoe) {
+                        let possibleBu = (row[lastSeenHoeIndex + 1] || '').trim();
+                        // 빈칸 방지: 목표/현재 수치 쪽에 숫자가 있으면 데이터 행으로 인정
+                        let checkNum1 = parseInt((row[8] || '').replace(/[^0-9]/g, ''));
+                        let checkNum2 = parseInt((row[34] || '').replace(/[^0-9]/g, ''));
+                        
+                        if (possibleBu !== "" || !isNaN(checkNum1) || !isNaN(checkNum2)) {
+                            hoeName = lastSeenHoe;
+                            buName = possibleBu;
+                            isDataRow = true;
+                        }
+                    }
 
-                    // 병합된 이름 가져오기
-                    let rawHoe = (row[hIndex] || '').replace(/\s+/g, '');
-                    if (rawHoe && targetHoes.includes(rawHoe)) lastSeenHoe = rawHoe; 
-                    else if (!rawHoe && lastSeenHoe) rawHoe = lastSeenHoe; 
-
-                    let rawBu = (row[hIndex + 1] || '').trim();
-
-                    // 합계, 소계 줄은 계산에서 제외
-                    if (rowString.includes('소계') || rowString.includes('합계')) return;
-
-                    if (targetHoes.includes(rawHoe)) {
-                        // ★ 누락 버그 해결: 하위 부서가 없으면 단일 부서로 등록
-                        let buName = rawBu === "" ? rawHoe + " (단일)" : rawBu;
+                    if (isDataRow) {
+                        buName = buName === "" ? hoeName + " (전체)" : buName;
 
                         if (!dataStore[currentMonth]) dataStore[currentMonth] = {};
-                        if (!dataStore[currentMonth][rawHoe]) {
-                            dataStore[currentMonth][rawHoe] = { summary: {}, bus: [] };
-                            for (let key in RELATIVE_MAP) {
-                                dataStore[currentMonth][rawHoe].summary[key] = { t: 0, c: 0 };
+                        if (!dataStore[currentMonth][hoeName]) {
+                            dataStore[currentMonth][hoeName] = { summary: {}, bus: [] };
+                            for (let key in METRICS_MAP) {
+                                dataStore[currentMonth][hoeName].summary[key] = { t: 0, c: 0 };
                             }
                         }
 
-                        const isDuplicate = dataStore[currentMonth][rawHoe].bus.some(b => b.name === buName);
+                        const isDuplicate = dataStore[currentMonth][hoeName].bus.some(b => b.name === buName);
                         
                         if (!isDuplicate) {
                             let buMetrics = {};
-                            let fallbackTotal = cleanNumber(row[hIndex + 2]); // 재적 인원 (기준열 + 2칸)
+                            let fallbackTotal = cleanNumber(row[5]); // F열 재적 인원
 
-                            for (let [metricName, offset] of Object.entries(RELATIVE_MAP)) {
-                                let originalTarget = cleanNumber(row[hIndex + offset.t]);
-                                let current = cleanNumber(row[hIndex + offset.c]);
+                            for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
+                                let originalTarget = cleanNumber(row[coords.target]);
+                                let current = cleanNumber(row[coords.current]);
                                 
-                                // 목표 스위칭 (목표가 없으면 재적 인원으로)
                                 let finalTarget = originalTarget > 0 ? originalTarget : fallbackTotal;
                                 let isFallback = originalTarget === 0 && fallbackTotal > 0;
                                 let percent = finalTarget > 0 ? Math.min(Math.round((current / finalTarget) * 100), 100) : (current > 0 ? 100 : 0);
 
                                 buMetrics[metricName] = { t: finalTarget, c: current, p: percent, isFallback };
 
-                                dataStore[currentMonth][rawHoe].summary[metricName].t += finalTarget;
-                                dataStore[currentMonth][rawHoe].summary[metricName].c += current;
+                                dataStore[currentMonth][hoeName].summary[metricName].t += finalTarget;
+                                dataStore[currentMonth][hoeName].summary[metricName].c += current;
                             }
-                            dataStore[currentMonth][rawHoe].bus.push({ name: buName, metrics: buMetrics });
+                            dataStore[currentMonth][hoeName].bus.push({ name: buName, metrics: buMetrics });
                         }
                     }
                 });
 
                 if (Object.keys(dataStore).length === 0) {
-                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 화면에 표시할 수 있는 데이터를 찾지 못했습니다.</p></div>';
+                    container.innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 화면에 표시할 데이터를 찾지 못했습니다.</p></div>';
                     return;
                 }
 
@@ -175,16 +176,18 @@
 
                 for (const [month, hoes] of Object.entries(dataStore)) {
                     let monthHtml = `
-                    <div class="mb-16">
+                    <div class="mb-20">
                         <h2 class="text-3xl font-black text-slate-800 border-l-8 border-slate-800 pl-4 mb-8">📅 ${month} 결산</h2>
-                        <div class="space-y-10">
+                        <div class="space-y-12">
                     `;
 
                     for (const [hoeName, hoeData] of Object.entries(hoes)) {
+                        
+                        // [1] 상단: 전체 종합 요약 (동일)
                         let summaryBarsHtml = `<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">`;
                         for (let [metricName, sum] of Object.entries(hoeData.summary)) {
                             let percent = sum.t > 0 ? Math.min(Math.round((sum.c / sum.t) * 100), 100) : (sum.c > 0 ? 100 : 0);
-                            let colorTheme = getColorClasses(RELATIVE_MAP[metricName].color, percent);
+                            let colorTheme = getColorClasses(METRICS_MAP[metricName].color, percent);
                             
                             summaryBarsHtml += `
                                 <div class="${colorTheme.bg} p-4 rounded-xl border border-white/50 shadow-sm relative overflow-hidden">
@@ -201,6 +204,43 @@
                         }
                         summaryBarsHtml += `</div>`;
 
+                        // [2] ★새로운 기능★: 부서별 신카접수 랭킹 비교 차트
+                        // 부서들을 '신카접수' 달성률(%) 기준으로 내림차순 정렬
+                        let sortedBus = [...hoeData.bus].sort((a, b) => b.metrics['신카접수'].p - a.metrics['신카접수'].p);
+                        
+                        let rankingHtml = `
+                            <div class="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 mb-6">
+                                <h4 class="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+                                    <span>🏆</span> 부서별 최종 성과 (신카접수) 비교
+                                </h4>
+                                <div class="space-y-4">
+                        `;
+
+                        sortedBus.forEach((bu, index) => {
+                            let m = bu.metrics['신카접수'];
+                            let barColor = m.p >= 100 ? 'bg-emerald-500' : (m.p >= 50 ? 'bg-emerald-400' : 'bg-slate-300');
+                            let medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : ''));
+                            
+                            rankingHtml += `
+                                <div class="flex items-center gap-4">
+                                    <div class="w-24 text-right font-bold text-slate-700 flex items-center justify-end gap-1">
+                                        ${medal} <span class="truncate">${bu.name}</span>
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                                            <span>${m.c}명 달성</span>
+                                            <span class="${m.p >= 100 ? 'text-emerald-600' : 'text-slate-500'}">${m.p}%</span>
+                                        </div>
+                                        <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
+                                            <div class="${barColor} h-full bar-fill rounded-full" style="width: 0%" data-width="${m.p}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        rankingHtml += `</div></div>`;
+
+                        // [3] 하단: 상세 데이터 표 (동일)
                         let tableHtml = `
                             <div class="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
                                 <table class="w-full text-left border-collapse min-w-[1000px]">
@@ -208,7 +248,7 @@
                                         <tr>
                                             <th class="p-4 bg-slate-800 text-white font-bold whitespace-nowrap rounded-tl-xl text-center w-28">부서명</th>
                         `;
-                        for (let metricName in RELATIVE_MAP) {
+                        for (let metricName in METRICS_MAP) {
                             tableHtml += `<th class="p-4 bg-slate-700 text-slate-100 font-bold text-center whitespace-nowrap border-l border-slate-600">${metricName}</th>`;
                         }
                         tableHtml += `</tr></thead><tbody class="divide-y divide-slate-100">`;
@@ -218,10 +258,9 @@
                                 <tr class="hover:bg-slate-50 transition-colors">
                                     <td class="p-4 font-black text-slate-800 text-center whitespace-nowrap border-r border-slate-100 bg-slate-50/50 text-lg">${bu.name}</td>
                             `;
-                            
-                            for (let [metricName, offset] of Object.entries(RELATIVE_MAP)) {
+                            for (let [metricName, coords] of Object.entries(METRICS_MAP)) {
                                 let m = bu.metrics[metricName];
-                                let colorTheme = getColorClasses(offset.color, m.p);
+                                let colorTheme = getColorClasses(coords.color, m.p);
                                 let targetLabel = m.isFallback ? `<span title="재적 기준" class="text-[10px] bg-slate-200 text-slate-600 px-1 rounded">재적</span>` : '목표';
                                 
                                 tableHtml += `
@@ -241,7 +280,6 @@
                             }
                             tableHtml += `</tr>`;
                         });
-                        
                         tableHtml += `</tbody></table></div>`;
 
                         monthHtml += `
@@ -251,7 +289,7 @@
                                     <h3 class="text-2xl font-black text-slate-900">${hoeName} 종합 파이프라인</h3>
                                 </div>
                                 ${summaryBarsHtml}
-                                ${tableHtml}
+                                ${rankingHtml}  ${tableHtml}
                             </div>
                         `;
                     }
@@ -268,7 +306,7 @@
 
             } catch (error) {
                 console.error(error);
-                document.getElementById('dashboard-container').innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 데이터를 불러오지 못했습니다.</p></div>';
+                document.getElementById('dashboard-container').innerHTML = '<div class="p-10 text-center bg-white rounded-3xl"><p class="text-rose-500 font-black text-2xl">🚨 통신 에러가 발생했습니다.</p></div>';
             }
         }
 
